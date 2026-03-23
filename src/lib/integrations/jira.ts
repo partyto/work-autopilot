@@ -25,7 +25,10 @@ async function jiraFetch(path: string, options: RequestInit = {}) {
     throw new Error(`Jira API error ${res.status}: ${text}`);
   }
 
-  return res.json();
+  // 204 No Content 등 빈 응답 처리 (예: transition POST)
+  const text = await res.text();
+  if (!text) return {};
+  return JSON.parse(text);
 }
 
 // ===== 검색 =====
