@@ -116,6 +116,35 @@ export async function createIssue(options: {
   });
 }
 
+// 접근 가능한 프로젝트 목록 조회
+export async function getProjects(): Promise<JiraProject[]> {
+  const data = await jiraFetch("/project/search?maxResults=50&orderBy=name");
+  return (data.values || []).map((p: any) => ({
+    key: p.key,
+    name: p.name,
+    id: p.id,
+  }));
+}
+
+// 특정 프로젝트의 이슈 타입 조회
+export async function getIssueTypesForProject(projectKey: string): Promise<JiraIssueType[]> {
+  const data = await jiraFetch(`/issue/createmeta/${projectKey}/issuetypes`);
+  return (data.issueTypes || data.values || []).map((it: any) => ({
+    id: it.id,
+    name: it.name,
+    subtask: it.subtask || false,
+  }));
+}
+
+// 우선순위 목록 조회
+export async function getPriorities(): Promise<JiraPriority[]> {
+  const data = await jiraFetch("/priority/search?maxResults=50");
+  return (data.values || []).map((p: any) => ({
+    id: p.id,
+    name: p.name,
+  }));
+}
+
 // 특정 이슈의 현재 상태만 가져오기
 export async function getIssueStatus(issueKey: string): Promise<string | null> {
   try {
@@ -147,4 +176,21 @@ export interface JiraTransition {
   id: string;
   name: string;
   to: { name: string };
+}
+
+export interface JiraProject {
+  key: string;
+  name: string;
+  id: string;
+}
+
+export interface JiraIssueType {
+  id: string;
+  name: string;
+  subtask: boolean;
+}
+
+export interface JiraPriority {
+  id: string;
+  name: string;
 }

@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
       // Jira 이슈 신규 생성 옵션
       createJiraIssue = false,
       jiraProjectKey = "BIZWAIT",
+      jiraIssueType = "Task",
+      jiraPriority,
     } = body;
 
     if (!title || title.trim() === "") {
@@ -91,16 +93,19 @@ export async function POST(request: NextRequest) {
     if (!finalJiraKey && createJiraIssue && jira.isJiraConfigured()) {
       // Jira 이슈 신규 생성
       try {
+        // Jira 우선순위: 명시적 지정 > TO-DO 우선순위 매핑
         const priorityMap: Record<string, string> = {
           high: "High",
           medium: "Medium",
           low: "Low",
         };
+        const finalPriority = jiraPriority || priorityMap[priority] || "Medium";
         const created = await jira.createIssue({
           projectKey: jiraProjectKey,
           summary: title.trim(),
           description: description?.trim() || undefined,
-          priority: priorityMap[priority] || "Medium",
+          issueType: jiraIssueType,
+          priority: finalPriority,
           assignToMe: true,
           dueDate: dueDate || undefined,
         });
