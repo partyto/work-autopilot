@@ -5,6 +5,42 @@ import { generateId, nowLocal, todayDate } from "@/lib/utils";
 import * as jira from "@/lib/integrations/jira";
 import * as slack from "@/lib/integrations/slack";
 
+// ===== 상태 매핑 =====
+// Jira → TO-DO 상태 매핑
+const JIRA_TO_TODO: Record<string, string> = {
+  DONE: "done",
+  "IN PROGRESS": "in_progress",
+  BACKLOG: "pending",
+};
+
+// TO-DO → Jira 상태 매핑
+const TODO_TO_JIRA: Record<string, string> = {
+  done: "DONE",
+  in_progress: "IN PROGRESS",
+  pending: "BACKLOG",
+};
+
+function jiraStatusToTodo(jiraStatus: string): string | null {
+  // 대소문자 무관 매핑
+  const upper = jiraStatus.toUpperCase();
+  if (upper === "DONE") return "done";
+  if (upper.includes("PROGRESS")) return "in_progress";
+  if (upper === "BACKLOG" || upper === "TO DO" || upper === "OPEN") return "pending";
+  // IN QA, IN REVIEW 등은 in_progress로 간주
+  if (upper.includes("QA") || upper.includes("REVIEW") || upper.includes("TEST")) return "in_progress";
+  return null; // 매핑 불가
+}
+
+function todoStatusToJira(todoStatus: string): string | null {
+  return TODO_TO_JIRA[todoStatus] || null;
+}
+
+const TODO_STATUS_LABEL: Record<string, string> = {
+  pending: "대기",
+  in_progress: "진행 중",
+  done: "완료",
+};
+
 // ===== 일일 스캔 =====
 export async function runDailyScan() {
   const report: string[] = [];
@@ -140,7 +176,7 @@ export async function runDailyScan() {
   return message;
 }
 
-// ===== Jira 상태 동기화 =====
+// ===== Jira ↔ TO-DO 양방향 상태 동기화 =====
 async function syncJiraStatuses(issues: jira.JiraIssue[]) {
   const now = nowLocal();
 
@@ -154,71 +190,85 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]) {
 
     if (!link) continue;
 
-    const newStatus = issue.fields.status.name;
-    const previousStatus = link.jiraStatus;
+    const jiraStatus = issue.fields.status.name;
+    const prevJiraStatus = link.jiraStatus;
+    const jiraChanged = prevJiraStatus !== null && prevJiraStatus !== jiraStatus;
 
     // Jira 상태 업데이트
-    if (previousStatus !== newStatus) {
-      await db.update(schema.taskLinks)
-        .set({ jiraStatus: newStatus, lastSyncedAt: now })
-        .where(eq(schema.taskLinks.id, link.id));
-    } else {
-      await db.update(schema.taskLinks)
-        .set({ lastSyncedAt: now })
-        .where(eq(schema.taskLinks.id, link.id));
-    }
+    await db.update(schema.taskLinks)
+      .set({
+        jiraStatus: jiraStatus,
+        lastSyncedAt: now,
+      })
+      .where(eq(schema.taskLinks.id, link.id));
 
-    // TO-DO ↔ Jira 상태 불일치 감지 (매 스캔마다 체크)
     const task = await db.query.tasks.findFirst({
       where: eq(schema.tasks.id, link.taskId),
     });
+    if (!task) continue;
 
-    if (task) {
-      const jiraDone = newStatus.toUpperCase() === "DONE";
-      const todoDone = task.status === "done";
-      const hasMismatch = (jiraDone && !todoDone) || (todoDone && !jiraDone);
+    // 양방향 매핑으로 불일치 감지
+    const expectedTodo = jiraStatusToTodo(jiraStatus);
+    const expectedJira = todoStatusToJira(task.status);
+    const isAligned = expectedTodo === task.status;
 
-      // 기존 proposed 액션 조회
-      const existingAction = await db.query.actions.findFirst({
-        where: and(
-          eq(schema.actions.taskId, task.id),
-          eq(schema.actions.status, "proposed" as any),
-        ),
-      });
+    // 기존 proposed 액션 조회
+    const existingAction = await db.query.actions.findFirst({
+      where: and(
+        eq(schema.actions.taskId, task.id),
+        eq(schema.actions.status, "proposed" as any),
+      ),
+    });
 
-      if (hasMismatch) {
-        // 불일치 존재 → 아직 proposed 액션이 없으면 생성
-        if (!existingAction) {
-          if (jiraDone && !todoDone) {
-            await db.insert(schema.actions).values({
-              id: generateId(),
-              taskId: task.id,
-              actionType: "todo_complete",
-              description: `Jira ${issue.key}가 DONE → TO-DO 완료 처리 제안`,
-              payload: JSON.stringify({ jiraIssueKey: issue.key, jiraStatus: newStatus }),
-              status: "proposed",
-              proposedAt: now,
-            });
-          } else if (todoDone && !jiraDone) {
-            await db.insert(schema.actions).values({
-              id: generateId(),
-              taskId: task.id,
-              actionType: "jira_transition",
-              description: `TO-DO 완료인데 Jira ${issue.key}는 ${newStatus} → DONE 전환 제안`,
-              payload: JSON.stringify({ jiraIssueKey: issue.key, targetStatus: "DONE" }),
-              status: "proposed",
-              proposedAt: now,
-            });
-          }
-        }
-      } else {
-        // 불일치 해소 → 기존 proposed 액션이 있으면 자동 취소
-        if (existingAction) {
-          await db.update(schema.actions)
-            .set({ status: "cancelled" as any })
-            .where(eq(schema.actions.id, existingAction.id));
-          console.log(`[Engine] 불일치 해소 → 액션 자동 취소: ${existingAction.description}`);
-        }
+    if (isAligned) {
+      // 상태 일치 → 기존 proposed 액션 자동 취소
+      if (existingAction) {
+        await db.update(schema.actions)
+          .set({ status: "cancelled" as any })
+          .where(eq(schema.actions.id, existingAction.id));
+        console.log(`[Engine] 상태 일치 → 액션 자동 취소: ${existingAction.description}`);
+      }
+      continue;
+    }
+
+    // 불일치 존재 — 방향 판단: 나중에 바뀐 쪽이 기준
+    if (existingAction) continue; // 이미 proposed 액션이 있으면 중복 방지
+
+    if (jiraChanged) {
+      // Jira가 변경됨 → Jira 기준으로 TO-DO 변경 제안
+      if (expectedTodo) {
+        const todoLabel = TODO_STATUS_LABEL[expectedTodo] || expectedTodo;
+        await db.insert(schema.actions).values({
+          id: generateId(),
+          taskId: task.id,
+          actionType: "todo_status_change",
+          description: `Jira ${issue.key}가 ${prevJiraStatus} → ${jiraStatus} 변경됨 → TO-DO "${todoLabel}" 전환 제안`,
+          payload: JSON.stringify({
+            jiraIssueKey: issue.key,
+            jiraStatus,
+            targetTodoStatus: expectedTodo,
+          }),
+          status: "proposed",
+          proposedAt: now,
+        });
+        console.log(`[Engine] Jira 변경 감지: ${issue.key} ${prevJiraStatus}→${jiraStatus} → TO-DO ${todoLabel} 제안`);
+      }
+    } else {
+      // Jira 미변경 → TO-DO가 변경된 것 → Jira 변경 제안
+      if (expectedJira) {
+        await db.insert(schema.actions).values({
+          id: generateId(),
+          taskId: task.id,
+          actionType: "jira_transition",
+          description: `TO-DO "${TODO_STATUS_LABEL[task.status] || task.status}"인데 Jira ${issue.key}는 ${jiraStatus} → ${expectedJira} 전환 제안`,
+          payload: JSON.stringify({
+            jiraIssueKey: issue.key,
+            targetStatus: expectedJira,
+          }),
+          status: "proposed",
+          proposedAt: now,
+        });
+        console.log(`[Engine] TO-DO 변경 감지: ${task.status} → Jira ${issue.key} ${expectedJira} 전환 제안`);
       }
     }
   }
@@ -249,7 +299,7 @@ export async function executeApprovedActions() {
           const target = transitions.find(
             (t) => t.name.toUpperCase() === targetStatus.toUpperCase() || t.to.name.toUpperCase() === targetStatus.toUpperCase()
           );
-          if (!target) throw new Error(`전환 '${targetStatus}'을 찾을 수 없음`);
+          if (!target) throw new Error(`전환 '${targetStatus}'을 찾을 수 없음 (가능: ${transitions.map((t) => t.name).join(", ")})`);
           await jira.transitionIssue(jiraIssueKey, target.id);
 
           await db.update(schema.actions).set({
@@ -263,17 +313,27 @@ export async function executeApprovedActions() {
           break;
         }
 
-        case "slack_reply": {
-          if (!slack.isSlackConfigured()) throw new Error("Slack API 미설정");
-          const { channelId, threadTs, message } = payload;
-          await slack.replyToThread(channelId, threadTs, message);
+        case "todo_status_change": {
+          const { targetTodoStatus, jiraIssueKey } = payload;
+          const updates: Record<string, any> = {
+            status: targetTodoStatus,
+            updatedAt: now,
+          };
+          if (targetTodoStatus === "done") {
+            updates.completedAt = now;
+          } else {
+            updates.completedAt = null;
+          }
+          await db.update(schema.tasks).set(updates)
+            .where(eq(schema.tasks.id, action.taskId));
 
           await db.update(schema.actions).set({
             status: "executed",
             executedAt: now,
           }).where(eq(schema.actions.id, action.id));
 
-          results.push(`✅ Slack 답글 발송 완료`);
+          const label = TODO_STATUS_LABEL[targetTodoStatus] || targetTodoStatus;
+          results.push(`✅ TO-DO → ${label} (Jira ${jiraIssueKey} 기준)`);
           executed++;
           break;
         }
@@ -291,6 +351,21 @@ export async function executeApprovedActions() {
           }).where(eq(schema.actions.id, action.id));
 
           results.push(`✅ TO-DO 완료 처리`);
+          executed++;
+          break;
+        }
+
+        case "slack_reply": {
+          if (!slack.isSlackConfigured()) throw new Error("Slack API 미설정");
+          const { channelId, threadTs, message } = payload;
+          await slack.replyToThread(channelId, threadTs, message);
+
+          await db.update(schema.actions).set({
+            status: "executed",
+            executedAt: now,
+          }).where(eq(schema.actions.id, action.id));
+
+          results.push(`✅ Slack 답글 발송 완료`);
           executed++;
           break;
         }

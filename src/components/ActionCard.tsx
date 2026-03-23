@@ -25,6 +25,7 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   jira_create: "Jira 이슈 생성",
   todo_create: "TO-DO 생성",
   todo_complete: "TO-DO 완료 처리",
+  todo_status_change: "TO-DO 상태 변경",
 };
 
 const ACTION_TYPE_COLORS: Record<string, string> = {
@@ -33,6 +34,7 @@ const ACTION_TYPE_COLORS: Record<string, string> = {
   jira_create: "bg-cyan-900/40 text-cyan-400 border-cyan-700/50",
   todo_create: "bg-emerald-900/40 text-emerald-400 border-emerald-700/50",
   todo_complete: "bg-green-900/40 text-green-400 border-green-700/50",
+  todo_status_change: "bg-amber-900/40 text-amber-400 border-amber-700/50",
 };
 
 const STATUS_BADGE: Record<string, { label: string; color: string }> = {
@@ -118,6 +120,12 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
             <div className="text-xs text-slate-400">
               Jira: <span className="text-blue-400">{payload.jiraIssueKey}</span>
               {payload.targetStatus && <span className="text-slate-500"> → {payload.targetStatus}</span>}
+            </div>
+          )}
+          {payload.targetTodoStatus && (
+            <div className="text-xs text-slate-400">
+              TO-DO 상태: <span className="text-amber-400">{payload.targetTodoStatus}</span>
+              {payload.reason && <span className="text-slate-500"> ({payload.reason})</span>}
             </div>
           )}
           {payload.summary && (
