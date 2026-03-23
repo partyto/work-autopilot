@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, desc, and, ne } from "drizzle-orm";
 import { generateId, nowLocal } from "@/lib/utils";
+import * as jira from "@/lib/integrations/jira";
 
 // GET /api/tasks - 할일 목록 조회
 export async function GET(request: NextRequest) {
@@ -56,6 +57,9 @@ export async function POST(request: NextRequest) {
       // 매핑 정보 (옵션)
       jiraIssueKey,
       slackThreadUrl,
+      // Jira 이슈 신규 생성 옵션
+      createJiraIssue = false,
+      jiraProjectKey = "BIZWAIT",
     } = body;
 
     if (!title || title.trim() === "") {
@@ -82,14 +86,40 @@ export async function POST(request: NextRequest) {
     });
 
     // Jira 매핑 생성
-    if (jiraIssueKey) {
+    let finalJiraKey = jiraIssueKey?.trim().toUpperCase() || null;
+
+    if (!finalJiraKey && createJiraIssue && jira.isJiraConfigured()) {
+      // Jira 이슈 신규 생성
+      try {
+        const priorityMap: Record<string, string> = {
+          high: "High",
+          medium: "Medium",
+          low: "Low",
+        };
+        const created = await jira.createIssue({
+          projectKey: jiraProjectKey,
+          summary: title.trim(),
+          description: description?.trim() || undefined,
+          priority: priorityMap[priority] || "Medium",
+          assignToMe: true,
+          dueDate: dueDate || undefined,
+        });
+        finalJiraKey = created.key;
+        console.log(`[Tasks API] Jira 이슈 생성: ${created.key}`);
+      } catch (err) {
+        console.error("[Tasks API] Jira 이슈 생성 실패:", err);
+        // Jira 생성 실패해도 TO-DO는 정상 생성
+      }
+    }
+
+    if (finalJiraKey) {
       await db.insert(schema.taskLinks).values({
         id: generateId(),
         taskId,
         linkType: "jira",
-        jiraIssueKey: jiraIssueKey.trim().toUpperCase(),
-        jiraIssueUrl: `https://catchtable.atlassian.net/browse/${jiraIssueKey.trim().toUpperCase()}`,
-        jiraProjectKey: jiraIssueKey.split("-")[0],
+        jiraIssueKey: finalJiraKey,
+        jiraIssueUrl: `https://catchtable.atlassian.net/browse/${finalJiraKey}`,
+        jiraProjectKey: finalJiraKey.split("-")[0],
         createdAt: now,
       });
     }

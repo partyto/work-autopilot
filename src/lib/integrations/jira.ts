@@ -69,6 +69,53 @@ export async function getMyRecentDoneIssues(projectKey = "BIZWAIT", days = 7) {
   );
 }
 
+// 이슈 생성
+export async function createIssue(options: {
+  projectKey: string;
+  summary: string;
+  description?: string;
+  issueType?: string;
+  priority?: string;
+  assignToMe?: boolean;
+  dueDate?: string;
+}): Promise<{ key: string; id: string; self: string }> {
+  const fields: Record<string, any> = {
+    project: { key: options.projectKey },
+    summary: options.summary,
+    issuetype: { name: options.issueType || "Task" },
+  };
+
+  if (options.description) {
+    fields.description = {
+      type: "doc",
+      version: 1,
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: options.description }],
+        },
+      ],
+    };
+  }
+
+  if (options.priority) {
+    fields.priority = { name: options.priority };
+  }
+
+  if (options.assignToMe && JIRA_ACCOUNT_ID) {
+    fields.assignee = { accountId: JIRA_ACCOUNT_ID };
+  }
+
+  if (options.dueDate) {
+    fields.duedate = options.dueDate;
+  }
+
+  return jiraFetch("/issue", {
+    method: "POST",
+    body: JSON.stringify({ fields }),
+  });
+}
+
 // 특정 이슈의 현재 상태만 가져오기
 export async function getIssueStatus(issueKey: string): Promise<string | null> {
   try {

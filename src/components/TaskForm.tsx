@@ -13,6 +13,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
   const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
   const [dueDate, setDueDate] = useState("");
   const [jiraIssueKey, setJiraIssueKey] = useState("");
+  const [createJiraIssue, setCreateJiraIssue] = useState(false);
   const [slackThreadUrl, setSlackThreadUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,6 +32,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
           priority,
           dueDate: dueDate || undefined,
           jiraIssueKey: jiraIssueKey || undefined,
+          createJiraIssue: createJiraIssue && !jiraIssueKey,
           slackThreadUrl: slackThreadUrl || undefined,
         }),
       });
@@ -41,6 +43,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
         setPriority("medium");
         setDueDate("");
         setJiraIssueKey("");
+        setCreateJiraIssue(false);
         setSlackThreadUrl("");
         setIsOpen(false);
         onCreated();
@@ -116,17 +119,51 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
       {/* 매핑 섹션 */}
       <div className="border-t border-[var(--border)] pt-4">
         <p className="text-xs text-slate-400 mb-3 font-medium">연결 (선택사항)</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3">
+          {/* Jira 연결 */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Jira 이슈 키</label>
-            <input
-              type="text"
-              placeholder="예: BIZWAIT-5555"
-              value={jiraIssueKey}
-              onChange={(e) => setJiraIssueKey(e.target.value)}
-              className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
-            />
+            <div className="flex items-center gap-3 mb-2">
+              <label className="block text-xs text-slate-500">Jira</label>
+              <div className="flex items-center gap-1 bg-[var(--surface2)] rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => { setCreateJiraIssue(false); }}
+                  className={`px-2.5 py-1 text-[10px] rounded-md transition-colors cursor-pointer ${
+                    !createJiraIssue
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  기존 이슈 연결
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setCreateJiraIssue(true); setJiraIssueKey(""); }}
+                  className={`px-2.5 py-1 text-[10px] rounded-md transition-colors cursor-pointer ${
+                    createJiraIssue
+                      ? "bg-emerald-600 text-white"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  새 이슈 생성
+                </button>
+              </div>
+            </div>
+            {createJiraIssue ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-950/30 border border-emerald-800/40 rounded-lg">
+                <span className="text-xs text-emerald-400">BIZWAIT 프로젝트에 Task 이슈가 자동 생성됩니다</span>
+              </div>
+            ) : (
+              <input
+                type="text"
+                placeholder="예: BIZWAIT-5555"
+                value={jiraIssueKey}
+                onChange={(e) => setJiraIssueKey(e.target.value)}
+                className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+              />
+            )}
           </div>
+          {/* Slack 연결 */}
           <div>
             <label className="block text-xs text-slate-500 mb-1">Slack 스레드 URL</label>
             <input
