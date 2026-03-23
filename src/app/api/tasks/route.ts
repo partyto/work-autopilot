@@ -57,11 +57,11 @@ export async function POST(request: NextRequest) {
       // 매핑 정보 (옵션)
       jiraIssueKey,
       slackThreadUrl,
-      // Jira 이슈 신규 생성 옵션
+      // Jira 이슈 신규 생성 옵션 (동적 필드 기반)
       createJiraIssue = false,
       jiraProjectKey = "BIZWAIT",
-      jiraIssueType = "Task",
-      jiraPriority,
+      jiraIssueTypeName = "Task",
+      jiraFields,       // 동적 필드 값 객체
     } = body;
 
     if (!title || title.trim() === "") {
@@ -91,23 +91,16 @@ export async function POST(request: NextRequest) {
     let finalJiraKey = jiraIssueKey?.trim().toUpperCase() || null;
 
     if (!finalJiraKey && createJiraIssue && jira.isJiraConfigured()) {
-      // Jira 이슈 신규 생성
       try {
-        // Jira 우선순위: 명시적 지정 > TO-DO 우선순위 매핑
-        const priorityMap: Record<string, string> = {
-          high: "High",
-          medium: "Medium",
-          low: "Low",
-        };
-        const finalPriority = jiraPriority || priorityMap[priority] || "Medium";
         const created = await jira.createIssue({
           projectKey: jiraProjectKey,
-          summary: title.trim(),
-          description: description?.trim() || undefined,
-          issueType: jiraIssueType,
-          priority: finalPriority,
-          assignToMe: true,
-          dueDate: dueDate || undefined,
+          issueTypeName: jiraIssueTypeName,
+          fields: jiraFields || {
+            summary: title.trim(),
+            description: description?.trim() || undefined,
+            duedate: dueDate || undefined,
+            assignee: jira.getMyAccountId(),
+          },
         });
         finalJiraKey = created.key;
         console.log(`[Tasks API] Jira 이슈 생성: ${created.key}`);

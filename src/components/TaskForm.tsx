@@ -6,94 +6,130 @@ interface TaskFormProps {
   onCreated: () => void;
 }
 
-type JiraProject = { key: string; name: string };
+type JiraProject = { key: string; name: string; id: string };
 type JiraIssueType = { id: string; name: string; subtask: boolean };
-type JiraPriority = { id: string; name: string };
+type JiraCreateField = {
+  fieldId: string;
+  name: string;
+  required: boolean;
+  schema: { type: string; items?: string; custom?: string };
+  allowedValues?: { id: string; name: string; value?: string }[];
+};
 
 export default function TaskForm({ onCreated }: TaskFormProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // TO-DO 기본 필드
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
   const [dueDate, setDueDate] = useState("");
-  const [jiraIssueKey, setJiraIssueKey] = useState("");
   const [slackThreadUrl, setSlackThreadUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Jira 생성 모드
+  // Jira 모드: none | link | create
   const [jiraMode, setJiraMode] = useState<"none" | "link" | "create">("none");
-  const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
-  const [jiraIssueTypes, setJiraIssueTypes] = useState<JiraIssueType[]>([]);
-  const [jiraPriorities, setJiraPriorities] = useState<JiraPriority[]>([]);
+  const [jiraIssueKey, setJiraIssueKey] = useState("");
+
+  // Jira 생성 메타
+  const [projects, setProjects] = useState<JiraProject[]>([]);
+  const [pinnedKeys, setPinnedKeys] = useState<string[]>([]);
+  const [issueTypes, setIssueTypes] = useState<JiraIssueType[]>([]);
+  const [createFields, setCreateFields] = useState<JiraCreateField[]>([]);
+  const [myAccountId, setMyAccountId] = useState("");
+
   const [selectedProject, setSelectedProject] = useState("");
-  const [selectedIssueType, setSelectedIssueType] = useState("");
-  const [selectedJiraPriority, setSelectedJiraPriority] = useState("");
-  const [jiraMetaLoading, setJiraMetaLoading] = useState(false);
-  const [jiraConfigured, setJiraConfigured] = useState(true);
+  const [selectedIssueType, setSelectedIssueType] = useState<JiraIssueType | null>(null);
+  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
 
-  // Jira 메타데이터 로드
-  const loadJiraMeta = useCallback(async (projectKey?: string) => {
-    setJiraMetaLoading(true);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadingIssueTypes, setLoadingIssueTypes] = useState(false);
+  const [loadingFields, setLoadingFields] = useState(false);
+
+  // 1) 프로젝트 목록 로드
+  const loadProjects = useCallback(async () => {
+    if (projects.length > 0) return;
+    setLoadingProjects(true);
     try {
-      const url = projectKey
-        ? `/api/jira/meta?projectKey=${projectKey}`
-        : "/api/jira/meta";
-      const res = await fetch(url);
-      if (!res.ok) {
-        const data = await res.json();
-        if (data.configured === false) setJiraConfigured(false);
-        return;
-      }
+      const res = await fetch("/api/jira/meta?action=projects");
+      if (!res.ok) return;
       const data = await res.json();
-      setJiraConfigured(data.configured);
-
-      if (data.projects?.length > 0 && jiraProjects.length === 0) {
-        setJiraProjects(data.projects);
-        if (!selectedProject) {
-          // 기본 프로젝트: BIZWAIT 우선, 없으면 첫 번째
-          const defaultP = data.projects.find((p: JiraProject) => p.key === "BIZWAIT") || data.projects[0];
-          setSelectedProject(defaultP.key);
-        }
-      }
-
-      if (data.priorities?.length > 0 && jiraPriorities.length === 0) {
-        setJiraPriorities(data.priorities);
-        if (!selectedJiraPriority) {
-          const medium = data.priorities.find((p: JiraPriority) => p.name === "Medium");
-          setSelectedJiraPriority(medium?.name || data.priorities[0]?.name || "");
-        }
-      }
-
-      if (data.issueTypes?.length > 0) {
-        const nonSubtask = data.issueTypes.filter((it: JiraIssueType) => !it.subtask);
-        setJiraIssueTypes(nonSubtask);
-        if (!selectedIssueType) {
-          const task = nonSubtask.find((it: JiraIssueType) => it.name === "Task");
-          setSelectedIssueType(task?.name || nonSubtask[0]?.name || "");
-        }
+      setProjects(data.projects || []);
+      setPinnedKeys(data.pinnedKeys || []);
+      // 기본 선택: 첫 번째 pinned 프로젝트
+      if (data.projects?.length > 0 && !selectedProject) {
+        setSelectedProject(data.pinnedKeys?.[0] || data.projects[0].key);
       }
     } catch (err) {
-      console.error("Failed to load Jira meta:", err);
+      console.error("프로젝트 로드 실패:", err);
     } finally {
-      setJiraMetaLoading(false);
+      setLoadingProjects(false);
     }
-  }, [jiraProjects.length, jiraPriorities.length, selectedProject, selectedIssueType, selectedJiraPriority]);
+  }, [projects.length, selectedProject]);
 
-  // 프로젝트 변경 시 이슈타입 다시 로드
+  // 2) 이슈타입 로드 (프로젝트 변경 시)
   useEffect(() => {
-    if (jiraMode === "create" && selectedProject) {
-      setJiraIssueTypes([]);
-      setSelectedIssueType("");
-      loadJiraMeta(selectedProject);
-    }
+    if (jiraMode !== "create" || !selectedProject) return;
+    let cancelled = false;
+    setLoadingIssueTypes(true);
+    setIssueTypes([]);
+    setSelectedIssueType(null);
+    setCreateFields([]);
+    setFieldValues({});
+
+    fetch(`/api/jira/meta?action=issuetypes&project=${selectedProject}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const types = data.issueTypes || [];
+        setIssueTypes(types);
+        if (types.length > 0) {
+          // 기본: Task 우선
+          const task = types.find((t: JiraIssueType) => t.name === "Task") || types[0];
+          setSelectedIssueType(task);
+        }
+      })
+      .catch((err) => console.error("이슈타입 로드 실패:", err))
+      .finally(() => { if (!cancelled) setLoadingIssueTypes(false); });
+
+    return () => { cancelled = true; };
   }, [selectedProject, jiraMode]);
 
-  // "새 이슈 생성" 모드 진입 시 메타 로드
+  // 3) 필드 로드 (이슈타입 변경 시)
   useEffect(() => {
-    if (jiraMode === "create" && jiraProjects.length === 0) {
-      loadJiraMeta();
-    }
-  }, [jiraMode]);
+    if (jiraMode !== "create" || !selectedProject || !selectedIssueType) return;
+    let cancelled = false;
+    setLoadingFields(true);
+    setCreateFields([]);
+    setFieldValues({});
+
+    fetch(`/api/jira/meta?action=fields&project=${selectedProject}&issueTypeId=${selectedIssueType.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setCreateFields(data.fields || []);
+        setMyAccountId(data.myAccountId || "");
+        // 기본값 설정
+        const defaults: Record<string, any> = {};
+        for (const f of data.fields || []) {
+          if (f.fieldId === "assignee") defaults[f.fieldId] = data.myAccountId;
+        }
+        setFieldValues(defaults);
+      })
+      .catch((err) => console.error("필드 로드 실패:", err))
+      .finally(() => { if (!cancelled) setLoadingFields(false); });
+
+    return () => { cancelled = true; };
+  }, [selectedProject, selectedIssueType, jiraMode]);
+
+  // "새 이슈 생성" 모드 진입 시 프로젝트 로드
+  useEffect(() => {
+    if (jiraMode === "create") loadProjects();
+  }, [jiraMode, loadProjects]);
+
+  const setFieldValue = (fieldId: string, value: any) => {
+    setFieldValues((prev) => ({ ...prev, [fieldId]: value }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +137,16 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
 
     setIsSubmitting(true);
     try {
+      // Jira 생성 시 fieldValues에 summary, description, duedate 자동 주입
+      let jiraFields: Record<string, any> | undefined;
+      if (jiraMode === "create") {
+        jiraFields = { ...fieldValues };
+        jiraFields.summary = title.trim();
+        if (description.trim()) jiraFields.description = description.trim();
+        if (dueDate) jiraFields.duedate = dueDate;
+        if (!jiraFields.assignee && myAccountId) jiraFields.assignee = myAccountId;
+      }
+
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,21 +158,18 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
           jiraIssueKey: jiraMode === "link" ? jiraIssueKey || undefined : undefined,
           createJiraIssue: jiraMode === "create",
           jiraProjectKey: jiraMode === "create" ? selectedProject : undefined,
-          jiraIssueType: jiraMode === "create" ? selectedIssueType : undefined,
-          jiraPriority: jiraMode === "create" ? selectedJiraPriority : undefined,
+          jiraIssueTypeName: jiraMode === "create" ? selectedIssueType?.name : undefined,
+          jiraFields: jiraMode === "create" ? jiraFields : undefined,
           slackThreadUrl: slackThreadUrl || undefined,
         }),
       });
 
       if (res.ok) {
-        const data = await res.json();
-        // 생성된 Jira 이슈 키 표시
-        const createdKey = data.links?.find((l: any) => l.linkType === "jira")?.jiraIssueKey;
-        if (jiraMode === "create" && createdKey) {
-          console.log(`Jira 이슈 생성됨: ${createdKey}`);
-        }
         resetForm();
         onCreated();
+      } else {
+        const err = await res.json();
+        alert(`생성 실패: ${err.error || "알 수 없는 오류"}`);
       }
     } catch (error) {
       console.error("Failed to create task:", error);
@@ -143,8 +186,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
     setJiraIssueKey("");
     setJiraMode("none");
     setSlackThreadUrl("");
-    setSelectedIssueType("");
-    setSelectedJiraPriority("");
+    setFieldValues({});
     setIsOpen(false);
   };
 
@@ -159,14 +201,20 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
     );
   }
 
-  const selectClass = "w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500";
   const inputClass = "w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500";
+  const selectClass = inputClass;
+  const labelClass = "block text-[10px] text-slate-400 mb-1";
+
+  // summary, description, duedate, assignee는 TO-DO 기본 필드에서 자동 매핑 → 별도 표시 불필요
+  const AUTO_MAPPED_FIELDS = new Set(["summary", "description", "duedate", "assignee"]);
+  const visibleFields = createFields.filter((f) => !AUTO_MAPPED_FIELDS.has(f.fieldId));
 
   return (
     <form
       onSubmit={handleSubmit}
       className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 space-y-4"
     >
+      {/* TO-DO 기본 필드 */}
       <div>
         <input
           type="text"
@@ -190,7 +238,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-slate-400 mb-1">우선순위</label>
+          <label className={labelClass}>우선순위</label>
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as any)}
@@ -202,7 +250,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-400 mb-1">기한</label>
+          <label className={labelClass}>기한</label>
           <input
             type="date"
             value={dueDate}
@@ -241,6 +289,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
           </div>
         </div>
 
+        {/* 기존 이슈 연결 */}
         {jiraMode === "link" && (
           <input
             type="text"
@@ -251,70 +300,79 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
           />
         )}
 
+        {/* 새 이슈 생성 */}
         {jiraMode === "create" && (
-          <div className="space-y-2 bg-emerald-950/20 border border-emerald-800/30 rounded-lg p-3">
-            {!jiraConfigured ? (
-              <p className="text-xs text-red-400">Jira API가 설정되지 않았습니다.</p>
-            ) : jiraMetaLoading && jiraProjects.length === 0 ? (
-              <p className="text-xs text-slate-400">Jira 정보 로딩 중...</p>
+          <div className="space-y-3 bg-emerald-950/20 border border-emerald-800/30 rounded-lg p-3">
+            {loadingProjects ? (
+              <p className="text-xs text-slate-400">프로젝트 로딩 중...</p>
             ) : (
               <>
-                <div className="grid grid-cols-3 gap-2">
-                  {/* 프로젝트 */}
+                {/* 프로젝트 + 이슈타입 선택 */}
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] text-emerald-400/70 mb-1">프로젝트</label>
+                    <label className="block text-[10px] text-emerald-400/70 mb-1">프로젝트 *</label>
                     <select
                       value={selectedProject}
                       onChange={(e) => setSelectedProject(e.target.value)}
                       className={selectClass}
                     >
-                      {jiraProjects.map((p) => (
+                      {projects.map((p) => (
                         <option key={p.key} value={p.key}>
-                          {p.key} — {p.name}
+                          {pinnedKeys.includes(p.key) ? "⭐ " : ""}{p.name} ({p.key})
                         </option>
                       ))}
                     </select>
                   </div>
-                  {/* 이슈 타입 */}
                   <div>
-                    <label className="block text-[10px] text-emerald-400/70 mb-1">이슈 타입</label>
-                    <select
-                      value={selectedIssueType}
-                      onChange={(e) => setSelectedIssueType(e.target.value)}
-                      className={selectClass}
-                      disabled={jiraIssueTypes.length === 0}
-                    >
-                      {jiraIssueTypes.length === 0 ? (
-                        <option value="">로딩 중...</option>
-                      ) : (
-                        jiraIssueTypes.map((it) => (
-                          <option key={it.id} value={it.name}>
-                            {it.name}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
-                  {/* 우선순위 */}
-                  <div>
-                    <label className="block text-[10px] text-emerald-400/70 mb-1">Jira 우선순위</label>
-                    <select
-                      value={selectedJiraPriority}
-                      onChange={(e) => setSelectedJiraPriority(e.target.value)}
-                      className={selectClass}
-                    >
-                      {jiraPriorities.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-[10px] text-emerald-400/70 mb-1">이슈 타입 *</label>
+                    {loadingIssueTypes ? (
+                      <div className="px-3 py-2 text-xs text-slate-500">로딩 중...</div>
+                    ) : (
+                      <select
+                        value={selectedIssueType?.id || ""}
+                        onChange={(e) => {
+                          const it = issueTypes.find((t) => t.id === e.target.value);
+                          setSelectedIssueType(it || null);
+                        }}
+                        className={selectClass}
+                        disabled={issueTypes.length === 0}
+                      >
+                        {issueTypes.map((it) => (
+                          <option key={it.id} value={it.id}>{it.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 mt-1">
+
+                {/* 동적 필드 */}
+                {loadingFields ? (
+                  <p className="text-xs text-slate-400">필드 로딩 중...</p>
+                ) : visibleFields.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-emerald-400/50 border-b border-emerald-800/20 pb-1">
+                      추가 필드 {visibleFields.filter((f) => f.required).length > 0 && "(* 필수)"}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {visibleFields.map((field) => (
+                        <DynamicField
+                          key={field.fieldId}
+                          field={field}
+                          value={fieldValues[field.fieldId]}
+                          onChange={(val) => setFieldValue(field.fieldId, val)}
+                          inputClass={inputClass}
+                          selectClass={selectClass}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* 자동 매핑 안내 */}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-emerald-800/20">
                   <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                  <span className="text-[10px] text-emerald-400/80">
-                    제목·설명·기한이 Jira 이슈에 자동 반영됩니다 · 담당자: 본인
+                  <span className="text-[10px] text-emerald-400/70">
+                    제목 → Summary · 설명 → Description · 기한 → Due Date · 담당자 → 본인 (자동)
                   </span>
                 </div>
               </>
@@ -335,6 +393,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
         />
       </div>
 
+      {/* 버튼 */}
       <div className="flex gap-2 justify-end">
         <button
           type="button"
@@ -360,3 +419,148 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
     </form>
   );
 }
+
+// ===== 동적 필드 렌더러 =====
+function DynamicField({
+  field,
+  value,
+  onChange,
+  inputClass,
+  selectClass,
+}: {
+  field: JiraCreateField;
+  value: any;
+  onChange: (val: any) => void;
+  inputClass: string;
+  selectClass: string;
+}) {
+  const label = `${field.name}${field.required ? " *" : ""}`;
+  const { type } = field.schema;
+
+  // select: allowedValues가 있는 경우
+  if (field.allowedValues && field.allowedValues.length > 0) {
+    // 다중 선택 (array 타입)
+    if (type === "array") {
+      const selected: string[] = Array.isArray(value) ? value : [];
+      return (
+        <div>
+          <label className="block text-[10px] text-slate-400 mb-1">{label}</label>
+          <select
+            multiple
+            value={selected}
+            onChange={(e) => {
+              const vals = Array.from(e.target.selectedOptions).map((o) => o.value);
+              onChange(vals.map((v) => ({ id: v })));
+            }}
+            className={`${selectClass} min-h-[60px]`}
+          >
+            {field.allowedValues.map((av) => (
+              <option key={av.id} value={av.id}>{av.name}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    // 단일 선택
+    return (
+      <div>
+        <label className="block text-[10px] text-slate-400 mb-1">{label}</label>
+        <select
+          value={typeof value === "object" ? value?.id || "" : value || ""}
+          onChange={(e) => {
+            const selected = field.allowedValues!.find((av) => av.id === e.target.value);
+            if (selected) {
+              // option 타입은 { id }, priority는 { name }
+              if (field.fieldId === "priority") {
+                onChange(selected.name);
+              } else {
+                onChange({ id: selected.id });
+              }
+            } else {
+              onChange(undefined);
+            }
+          }}
+          className={selectClass}
+        >
+          {!field.required && <option value="">선택 안함</option>}
+          {field.allowedValues.map((av) => (
+            <option key={av.id} value={av.id}>{av.name}</option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  // number 타입
+  if (type === "number") {
+    return (
+      <div>
+        <label className="block text-[10px] text-slate-400 mb-1">{label}</label>
+        <input
+          type="number"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
+          className={inputClass}
+          placeholder={field.name}
+        />
+      </div>
+    );
+  }
+
+  // date 타입
+  if (type === "date") {
+    return (
+      <div>
+        <label className="block text-[10px] text-slate-400 mb-1">{label}</label>
+        <input
+          type="date"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value || undefined)}
+          className={inputClass}
+        />
+      </div>
+    );
+  }
+
+  // labels (string array, 쉼표 구분 입력)
+  if (field.fieldId === "labels") {
+    return (
+      <div>
+        <label className="block text-[10px] text-slate-400 mb-1">{label}</label>
+        <input
+          type="text"
+          value={Array.isArray(value) ? value.join(", ") : value || ""}
+          onChange={(e) => {
+            const vals = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+            onChange(vals.length > 0 ? vals : undefined);
+          }}
+          className={inputClass}
+          placeholder="쉼표로 구분 (예: bug, urgent)"
+        />
+      </div>
+    );
+  }
+
+  // 기본: 텍스트 입력
+  return (
+    <div>
+      <label className="block text-[10px] text-slate-400 mb-1">{label}</label>
+      <input
+        type="text"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        className={inputClass}
+        placeholder={field.name}
+      />
+    </div>
+  );
+}
+
+type JiraCreateField = {
+  fieldId: string;
+  name: string;
+  required: boolean;
+  schema: { type: string; items?: string; custom?: string };
+  allowedValues?: { id: string; name: string; value?: string }[];
+};
