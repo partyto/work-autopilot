@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { nowLocal } from "@/lib/utils";
+import { executeApprovedActions } from "@/lib/engine";
 
 // PATCH /api/actions/[id] - 액션 상태 변경 (승인/거절/실행완료)
 export async function PATCH(
@@ -35,6 +36,15 @@ export async function PATCH(
       .update(schema.actions)
       .set(updateData)
       .where(eq(schema.actions.id, id));
+
+    // 승인 시 즉시 실행
+    if (body.status === "approved") {
+      try {
+        await executeApprovedActions();
+      } catch (execError) {
+        console.error("[Actions API] 승인 후 즉시 실행 실패:", execError);
+      }
+    }
 
     const updated = await db.query.actions.findFirst({
       where: eq(schema.actions.id, id),

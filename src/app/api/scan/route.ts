@@ -13,6 +13,8 @@ export async function POST(request: NextRequest) {
     }
 
     const report = await runDailyScan();
+    // 스캔 후 승인된 액션이 있으면 자동 실행
+    await executeApprovedActions();
     return NextResponse.json({ success: true, type: "scan", report });
   } catch (error) {
     console.error("Manual scan failed:", error);
