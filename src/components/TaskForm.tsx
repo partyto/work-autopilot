@@ -556,11 +556,3 @@ function DynamicField({
     </div>
   );
 }
-
-type JiraCreateField = {
-  fieldId: string;
-  name: string;
-  required: boolean;
-  schema: { type: string; items?: string; custom?: string };
-  allowedValues?: { id: string; name: string; value?: string }[];
-};
