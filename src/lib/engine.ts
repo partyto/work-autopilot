@@ -174,7 +174,11 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]) {
     });
 
     if (task) {
-      // 같은 task+actionType 조합으로 이미 proposed 액션이 있으면 중복 생성 방지
+      const jiraDone = newStatus.toUpperCase() === "DONE";
+      const todoDone = task.status === "done";
+      const hasMismatch = (jiraDone && !todoDone) || (todoDone && !jiraDone);
+
+      // 기존 proposed 액션 조회
       const existingAction = await db.query.actions.findFirst({
         where: and(
           eq(schema.actions.taskId, task.id),
@@ -182,30 +186,38 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]) {
         ),
       });
 
-      if (!existingAction) {
-        // Jira DONE → TO-DO 미완료 → 완료 제안
-        if (newStatus.toUpperCase() === "DONE" && task.status !== "done") {
-          await db.insert(schema.actions).values({
-            id: generateId(),
-            taskId: task.id,
-            actionType: "todo_complete",
-            description: `Jira ${issue.key}가 DONE → TO-DO 완료 처리 제안`,
-            payload: JSON.stringify({ jiraIssueKey: issue.key, jiraStatus: newStatus }),
-            status: "proposed",
-            proposedAt: now,
-          });
+      if (hasMismatch) {
+        // 불일치 존재 → 아직 proposed 액션이 없으면 생성
+        if (!existingAction) {
+          if (jiraDone && !todoDone) {
+            await db.insert(schema.actions).values({
+              id: generateId(),
+              taskId: task.id,
+              actionType: "todo_complete",
+              description: `Jira ${issue.key}가 DONE → TO-DO 완료 처리 제안`,
+              payload: JSON.stringify({ jiraIssueKey: issue.key, jiraStatus: newStatus }),
+              status: "proposed",
+              proposedAt: now,
+            });
+          } else if (todoDone && !jiraDone) {
+            await db.insert(schema.actions).values({
+              id: generateId(),
+              taskId: task.id,
+              actionType: "jira_transition",
+              description: `TO-DO 완료인데 Jira ${issue.key}는 ${newStatus} → DONE 전환 제안`,
+              payload: JSON.stringify({ jiraIssueKey: issue.key, targetStatus: "DONE" }),
+              status: "proposed",
+              proposedAt: now,
+            });
+          }
         }
-        // TO-DO 완료 → Jira 미완료 → Jira 전환 제안
-        else if (task.status === "done" && newStatus.toUpperCase() !== "DONE") {
-          await db.insert(schema.actions).values({
-            id: generateId(),
-            taskId: task.id,
-            actionType: "jira_transition",
-            description: `TO-DO 완료인데 Jira ${issue.key}는 ${newStatus} → DONE 전환 제안`,
-            payload: JSON.stringify({ jiraIssueKey: issue.key, targetStatus: "DONE" }),
-            status: "proposed",
-            proposedAt: now,
-          });
+      } else {
+        // 불일치 해소 → 기존 proposed 액션이 있으면 자동 취소
+        if (existingAction) {
+          await db.update(schema.actions)
+            .set({ status: "cancelled" as any })
+            .where(eq(schema.actions.id, existingAction.id));
+          console.log(`[Engine] 불일치 해소 → 액션 자동 취소: ${existingAction.description}`);
         }
       }
     }

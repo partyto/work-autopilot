@@ -40,6 +40,7 @@ const STATUS_BADGE: Record<string, { label: string; color: string }> = {
   approved: { label: "승인됨", color: "bg-blue-600" },
   executed: { label: "실행 완료", color: "bg-green-600" },
   rejected: { label: "거절됨", color: "bg-slate-600" },
+  cancelled: { label: "자동 취소", color: "bg-orange-600" },
 };
 
 export default function ActionCard({ action, onUpdate }: ActionCardProps) {

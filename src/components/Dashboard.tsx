@@ -46,7 +46,7 @@ const FILTER_TABS = [
 const ACTION_FILTER_TABS = [
   { key: "proposed", label: "대기", filter: (a: ActionWithTask) => a.status === "proposed" },
   { key: "all", label: "전체", filter: () => true },
-  { key: "executed", label: "실행됨", filter: (a: ActionWithTask) => a.status === "executed" },
+  { key: "executed", label: "실행됨", filter: (a: ActionWithTask) => a.status === "executed" || a.status === "cancelled" || a.status === "rejected" },
 ] as const;
 
 export default function Dashboard() {
