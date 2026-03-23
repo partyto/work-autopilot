@@ -157,17 +157,32 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]) {
     const newStatus = issue.fields.status.name;
     const previousStatus = link.jiraStatus;
 
-    // 상태 변경 감지
+    // Jira 상태 업데이트
     if (previousStatus !== newStatus) {
       await db.update(schema.taskLinks)
         .set({ jiraStatus: newStatus, lastSyncedAt: now })
         .where(eq(schema.taskLinks.id, link.id));
+    } else {
+      await db.update(schema.taskLinks)
+        .set({ lastSyncedAt: now })
+        .where(eq(schema.taskLinks.id, link.id));
+    }
 
-      const task = await db.query.tasks.findFirst({
-        where: eq(schema.tasks.id, link.taskId),
+    // TO-DO ↔ Jira 상태 불일치 감지 (매 스캔마다 체크)
+    const task = await db.query.tasks.findFirst({
+      where: eq(schema.tasks.id, link.taskId),
+    });
+
+    if (task) {
+      // 같은 task+actionType 조합으로 이미 proposed 액션이 있으면 중복 생성 방지
+      const existingAction = await db.query.actions.findFirst({
+        where: and(
+          eq(schema.actions.taskId, task.id),
+          eq(schema.actions.status, "proposed" as any),
+        ),
       });
 
-      if (task) {
+      if (!existingAction) {
         // Jira DONE → TO-DO 미완료 → 완료 제안
         if (newStatus.toUpperCase() === "DONE" && task.status !== "done") {
           await db.insert(schema.actions).values({
@@ -193,11 +208,6 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]) {
           });
         }
       }
-    } else {
-      // 상태 동일해도 lastSyncedAt 갱신
-      await db.update(schema.taskLinks)
-        .set({ lastSyncedAt: now })
-        .where(eq(schema.taskLinks.id, link.id));
     }
   }
 }
