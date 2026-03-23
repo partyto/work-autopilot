@@ -70,12 +70,13 @@ export const actions = sqliteTable("actions", {
       "jira_create",
       "todo_create",
       "todo_complete",
+      "todo_status_change",
     ],
   }).notNull(),
   description: text("description").notNull(),
   payload: text("payload"), // JSON string
   status: text("status", {
-    enum: ["proposed", "approved", "executed", "rejected"],
+    enum: ["proposed", "approved", "executed", "rejected", "cancelled"],
   })
     .notNull()
     .default("proposed"),
