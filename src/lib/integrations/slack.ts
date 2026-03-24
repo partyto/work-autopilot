@@ -1,7 +1,10 @@
 // Slack Web API 직접 연동 — Cowork MCP 의존성 제거
-// 필요 환경변수: SLACK_BOT_TOKEN, SLACK_USER_ID
+// 필요 환경변수: SLACK_BOT_TOKEN, SLACK_USER_TOKEN, SLACK_USER_ID
+// - SLACK_BOT_TOKEN: DM 발송, 스레드 답글 등 (xoxb-)
+// - SLACK_USER_TOKEN: 검색 API용 (xoxp-) — search:read scope 필요
 
 const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN || "";
+const SLACK_USER_TOKEN = process.env.SLACK_USER_TOKEN || "";
 const SLACK_USER_ID = process.env.SLACK_USER_ID || "U042YQ0RUAY";
 
 async function slackApi(method: string, body: Record<string, any> = {}) {
@@ -47,19 +50,23 @@ export async function replyToThread(channelId: string, threadTs: string, text: s
   });
 }
 
-// 최근 멘션 검색
+// 최근 멘션 검색 (User Token 필요 — search:read scope)
 export async function searchMentions(query: string, count = 20) {
-  // search.messages는 user token이 필요 (bot token으로는 제한적)
+  const token = SLACK_USER_TOKEN || SLACK_TOKEN;
+  if (!token) {
+    console.warn("Slack search skipped: no token available");
+    return [];
+  }
+
   const res = await fetch(
     `https://slack.com/api/search.messages?query=${encodeURIComponent(query)}&count=${count}&sort=timestamp&sort_dir=desc`,
     {
-      headers: { Authorization: `Bearer ${SLACK_TOKEN}` },
+      headers: { Authorization: `Bearer ${token}` },
     }
   );
   const data = await res.json();
   if (!data.ok) {
-    // search API가 bot token으로 안 되면 빈 배열 반환
-    console.warn("Slack search failed (bot token may not support search):", data.error);
+    console.warn("Slack search failed:", data.error, SLACK_USER_TOKEN ? "(user token)" : "(bot token — user token 필요)");
     return [];
   }
   return data.messages?.matches || [];
