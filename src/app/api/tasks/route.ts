@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, desc, and, ne } from "drizzle-orm";
 import { generateId, nowLocal } from "@/lib/utils";
-import * as jira from "@/lib/integrations/jira";
 
 // GET /api/tasks - 할일 목록 조회
 export async function GET(request: NextRequest) {
@@ -57,11 +56,6 @@ export async function POST(request: NextRequest) {
       // 매핑 정보 (옵션)
       jiraIssueKey,
       slackThreadUrl,
-      // Jira 이슈 신규 생성 옵션 (동적 필드 기반)
-      createJiraIssue = false,
-      jiraProjectKey = "BIZWAIT",
-      jiraIssueTypeName = "Task",
-      jiraFields,       // 동적 필드 값 객체
     } = body;
 
     if (!title || title.trim() === "") {
@@ -88,36 +82,14 @@ export async function POST(request: NextRequest) {
     });
 
     // Jira 매핑 생성
-    let finalJiraKey = jiraIssueKey?.trim().toUpperCase() || null;
-
-    if (!finalJiraKey && createJiraIssue && jira.isJiraConfigured()) {
-      try {
-        const created = await jira.createIssue({
-          projectKey: jiraProjectKey,
-          issueTypeName: jiraIssueTypeName,
-          fields: jiraFields || {
-            summary: title.trim(),
-            description: description?.trim() || undefined,
-            duedate: dueDate || undefined,
-            assignee: jira.getMyAccountId(),
-          },
-        });
-        finalJiraKey = created.key;
-        console.log(`[Tasks API] Jira 이슈 생성: ${created.key}`);
-      } catch (err) {
-        console.error("[Tasks API] Jira 이슈 생성 실패:", err);
-        // Jira 생성 실패해도 TO-DO는 정상 생성
-      }
-    }
-
-    if (finalJiraKey) {
+    if (jiraIssueKey) {
       await db.insert(schema.taskLinks).values({
         id: generateId(),
         taskId,
         linkType: "jira",
-        jiraIssueKey: finalJiraKey,
-        jiraIssueUrl: `https://catchtable.atlassian.net/browse/${finalJiraKey}`,
-        jiraProjectKey: finalJiraKey.split("-")[0],
+        jiraIssueKey: jiraIssueKey.trim().toUpperCase(),
+        jiraIssueUrl: `https://catchtable.atlassian.net/browse/${jiraIssueKey.trim().toUpperCase()}`,
+        jiraProjectKey: jiraIssueKey.split("-")[0],
         createdAt: now,
       });
     }
