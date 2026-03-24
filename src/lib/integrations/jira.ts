@@ -79,6 +79,40 @@ export async function getIssueStatus(issueKey: string): Promise<string | null> {
   }
 }
 
+// 현재 사용자 Account ID 반환
+export function getMyAccountId(): string {
+  return JIRA_ACCOUNT_ID;
+}
+
+// 전체 프로젝트 목록 조회
+export async function getProjects(): Promise<JiraProject[]> {
+  const data = await jiraFetch("/project/search?maxResults=100&orderBy=name");
+  return (data.values || []) as JiraProject[];
+}
+
+// 프로젝트의 이슈 타입 목록 조회
+export async function getIssueTypes(projectKey: string): Promise<JiraIssueType[]> {
+  const data = await jiraFetch(`/issue/createmeta?projectKeys=${projectKey}&expand=projects.issuetypes`);
+  const project = (data.projects || [])[0];
+  return (project?.issuetypes || []) as JiraIssueType[];
+}
+
+// 이슈 생성 메타 (필드 목록) 조회
+export async function getCreateMetaFields(projectKey: string, issueTypeId: string): Promise<JiraCreateField[]> {
+  const data = await jiraFetch(
+    `/issue/createmeta/${projectKey}/issuetypes/${issueTypeId}?maxResults=50`
+  );
+  return (data.fields || []) as JiraCreateField[];
+}
+
+// 이슈 생성
+export async function createIssue(fields: Record<string, any>): Promise<{ key: string; id: string; self: string }> {
+  return jiraFetch("/issue", {
+    method: "POST",
+    body: JSON.stringify({ fields }),
+  });
+}
+
 // Jira 설정 유효성 체크
 export function isJiraConfigured(): boolean {
   return !!(JIRA_EMAIL && JIRA_TOKEN);
@@ -100,4 +134,24 @@ export interface JiraTransition {
   id: string;
   name: string;
   to: { name: string };
+}
+
+export interface JiraProject {
+  id: string;
+  key: string;
+  name: string;
+}
+
+export interface JiraIssueType {
+  id: string;
+  name: string;
+  subtask: boolean;
+}
+
+export interface JiraCreateField {
+  fieldId: string;
+  name: string;
+  required: boolean;
+  schema: { type: string; items?: string; custom?: string };
+  allowedValues?: { id: string; name: string; value?: string }[];
 }
