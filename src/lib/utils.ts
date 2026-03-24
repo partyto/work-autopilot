@@ -5,12 +5,7 @@ export function generateId(): string {
 }
 
 export function todayDate(): string {
-  // TZ 환경변수 기반 로컬 날짜 반환 (NAS: Asia/Seoul)
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return new Date().toISOString().split("T")[0];
 }
 
 export function nowLocal(): string {

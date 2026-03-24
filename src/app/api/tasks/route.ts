@@ -6,6 +6,7 @@ import type { Task } from "@/db/schema";
 import * as jira from "@/lib/integrations/jira";
 import * as gcal from "@/lib/integrations/gcal";
 
+// GET /api/tasks - 할일 목록 조회
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
       orderBy: [asc(schema.tasks.sortOrder), desc(schema.tasks.createdAt)],
     });
 
+    // 매핑 정보도 함께 조회
     if (includeLinks) {
       const tasksWithLinks = await Promise.all(
         taskList.map(async (task: Task) => {
@@ -37,10 +39,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(taskList);
   } catch (error) {
     console.error("Failed to fetch tasks:", error);
-    return NextResponse.json({ error: "할일 목록 조회 실패" }, { status: 500 });
+    return NextResponse.json(
+      { error: "할일 목록 조회 실패" },
+      { status: 500 }
+    );
   }
 }
 
+// POST /api/tasks - 새 할일 생성
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -50,21 +56,27 @@ export async function POST(request: NextRequest) {
       priority = "medium",
       dueDate,
       sourceType = "manual",
+      // 매핑 정보 (옵션)
       jiraIssueKey,
       slackThreadUrl,
+      // Jira 이슈 신규 생성 옵션 (동적 필드 기반)
       createJiraIssue = false,
       jiraProjectKey = "BIZWAIT",
       jiraIssueTypeName = "Task",
-      jiraFields,
+      jiraFields,       // 동적 필드 값 객체
     } = body;
 
     if (!title || title.trim() === "") {
-      return NextResponse.json({ error: "제목은 필수입니다" }, { status: 400 });
+      return NextResponse.json(
+        { error: "제목은 필수입니다" },
+        { status: 400 }
+      );
     }
 
     const taskId = generateId();
     const now = nowLocal();
 
+    // 할일 생성
     await db.insert(schema.tasks).values({
       id: taskId,
       title: title.trim(),
@@ -77,6 +89,7 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     });
 
+    // Jira 매핑 생성
     let finalJiraKey = jiraIssueKey?.trim().toUpperCase() || null;
 
     if (!finalJiraKey && createJiraIssue && jira.isJiraConfigured()) {
@@ -92,8 +105,10 @@ export async function POST(request: NextRequest) {
           },
         });
         finalJiraKey = created.key;
+        console.log(`[Tasks API] Jira 이슈 생성: ${created.key}`);
       } catch (err) {
         console.error("[Tasks API] Jira 이슈 생성 실패:", err);
+        // Jira 생성 실패해도 TO-DO는 정상 생성
       }
     }
 
@@ -109,6 +124,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Google Calendar 이벤트 생성 (기한 있는 경우)
     if (dueDate && gcal.isGcalConfigured()) {
       try {
         const { id: gcalEventId } = await gcal.createEvent(
@@ -117,19 +133,23 @@ export async function POST(request: NextRequest) {
           description?.trim(),
         );
         await db.insert(schema.taskLinks).values({
-          id: generateId(),
+          id:             generateId(),
           taskId,
-          linkType: "gcal" as any,
+          linkType:       "gcal" as any,
           gcalEventId,
           gcalCalendarId: gcal.GCAL_CALENDAR_ID,
-          createdAt: now,
+          createdAt:      now,
         });
+        console.log(`[Tasks API] 캘린더 이벤트 생성: ${gcalEventId} (${dueDate})`);
       } catch (err) {
         console.error("[Tasks API] 캘린더 이벤트 생성 실패:", err);
+        // 캘린더 실패해도 TO-DO 생성은 정상 처리
       }
     }
 
+    // Slack 매핑 생성
     if (slackThreadUrl) {
+      // Slack URL에서 channel_id와 thread_ts 추출 시도
       const parsed = parseSlackUrl(slackThreadUrl);
       await db.insert(schema.taskLinks).values({
         id: generateId(),
@@ -142,6 +162,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 생성된 할일 + 매핑 반환
     const created = await db.query.tasks.findFirst({
       where: eq(schema.tasks.id, taskId),
     });
@@ -152,16 +173,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...created, links }, { status: 201 });
   } catch (error) {
     console.error("Failed to create task:", error);
-    return NextResponse.json({ error: "할일 생성 실패" }, { status: 500 });
+    return NextResponse.json(
+      { error: "할일 생성 실패" },
+      { status: 500 }
+    );
   }
 }
 
+// Slack URL 파싱 헬퍼
 function parseSlackUrl(url: string): { channelId: string; threadTs: string } | null {
   try {
+    // https://wad-hq.slack.com/archives/C0992T55813/p1711234567890123
     const match = url.match(/archives\/([A-Z0-9]+)\/p(\d+)/);
     if (match) {
       const channelId = match[1];
       const rawTs = match[2];
+      // Slack ts format: 1711234567.890123
       const threadTs = rawTs.slice(0, 10) + "." + rawTs.slice(10);
       return { channelId, threadTs };
     }

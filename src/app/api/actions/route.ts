@@ -7,7 +7,7 @@ import type { Action } from "@/db/schema";
 // GET /api/actions - 액션 목록 조회
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const status = searchParams.get("status");
+  const status = searchParams.get("status"); // proposed, approved, executed, rejected
   const taskId = searchParams.get("taskId");
 
   try {
@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
       orderBy: [desc(schema.actions.proposedAt)],
     });
 
+    // 각 액션에 연결된 task 정보도 함께 반환
     const actionsWithTask = await Promise.all(
       actionList.map(async (action: Action) => {
         const task = await db.query.tasks.findFirst({
@@ -36,16 +37,21 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/actions - 새 액션 제안
+// POST /api/actions - 새 액션 제안 (Scheduled Task에서 호출)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // 배열로 여러 액션 한번에 생성 가능
     const items = Array.isArray(body) ? body : [body];
     const created = [];
 
     for (const item of items) {
       const { taskId, actionType, description, payload } = item;
-      if (!taskId || !actionType || !description) continue;
+
+      if (!taskId || !actionType || !description) {
+        continue; // 필수 필드 없으면 스킵
+      }
 
       const actionId = generateId();
       const now = nowLocal();
