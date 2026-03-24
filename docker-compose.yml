@@ -3,15 +3,15 @@ services:
     image: ghcr.io/partyto/work-autopilot:latest
     container_name: work-autopilot
     restart: unless-stopped
-    ports:
-      - "3100:3000"
+    network_mode: host
     volumes:
-      - ./work-autopilot.db:/app/work-autopilot.db
+      - ./data:/app/data
     env_file:
       - .env
     environment:
       - TZ=Asia/Seoul
       - NODE_ENV=production
+      - PORT=3100
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
@@ -21,7 +21,6 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/.docker/config.json:/config.json:ro
     environment:
       - TZ=Asia/Seoul
       - WATCHTOWER_CLEANUP=true
