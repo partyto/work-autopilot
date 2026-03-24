@@ -3,7 +3,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Work Autopilot",
+  title: "Work Pavlotrasche",
   description: "TO-DO 중심 업무 자동 관리 시스템",
 };
 
@@ -22,7 +22,7 @@ export default function RootLayout({
                 <span className="text-sm font-bold text-white tracking-wide">W</span>
               </div>
               <div>
-                <h1 className="text-lg font-bold gradient-text leading-none">Work Autopilot</h1>
+                <h1 className="text-lg font-bold gradient-text leading-none">Work Pavlotrasche</h1>
                 <p className="text-xs text-slate-500 mt-0.5 tracking-wide">업무 자동화 대시보드</p>
               </div>
             </div>

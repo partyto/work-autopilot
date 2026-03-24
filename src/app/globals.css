@@ -27,7 +27,7 @@ body {
   background: linear-gradient(180deg, #f1f5f9 0%, var(--background) 160px);
   color: var(--foreground);
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 /* Custom scrollbar */
