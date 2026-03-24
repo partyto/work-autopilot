@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { runDailyScan } from "./engine";
+import { runDailyScan, executeApprovedActions } from "./engine";
 
 let initialized = false;
 
@@ -12,6 +12,7 @@ export function initScheduler() {
     console.log(`[Scheduler] Daily scan started at ${new Date().toISOString()}`);
     try {
       await runDailyScan();
+      await executeApprovedActions(); // 스캔 직후 승인된 액션 즉시 실행
       console.log(`[Scheduler] Daily scan completed`);
     } catch (error) {
       console.error("[Scheduler] Daily scan failed:", error);
@@ -34,5 +35,5 @@ export function initScheduler() {
     timezone: "Asia/Seoul",
   });
 
-  console.log("[Scheduler] Initialized — Daily scan: 17:30 KST (Mon-Fri), Action executor: 10/12/14/16/18h KST (Mon-Fri)");
+  console.log("[Scheduler] Initialized — Daily scan: 17:30 KST (Mon-Fri), Executor: 10/12/14/16/18h KST (Mon-Fri)");
 }
