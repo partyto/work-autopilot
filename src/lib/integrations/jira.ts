@@ -31,7 +31,7 @@ async function jiraFetch(path: string, options: RequestInit = {}) {
 // JQL로 이슈 검색
 export async function searchIssues(jql: string, maxResults = 50) {
   const data = await jiraFetch(
-    `/search?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}&fields=summary,status,priority,duedate,updated,assignee`
+    `/search/jql?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}&fields=summary,status,priority,duedate,updated,assignee`
   );
   return data.issues as JiraIssue[];
 }
