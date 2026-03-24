@@ -27,7 +27,7 @@ export const STATUS_LABELS: Record<string, string> = {
 export const STATUS_COLORS: Record<string, string> = {
   pending: "bg-slate-500",
   in_progress: "bg-blue-500",
-  done: "bg-green-500",
+  done: "bg-emerald-500",
   cancelled: "bg-gray-500",
   overdue: "bg-red-500",
 };

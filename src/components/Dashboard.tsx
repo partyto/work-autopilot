@@ -254,7 +254,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-7">
       {/* 상단 컨트롤 바 */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         {/* 연결 상태 */}
@@ -269,20 +269,20 @@ export default function Dashboard() {
           <button
             onClick={handleRefreshAll}
             disabled={isScanning}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
+            className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-xl transition-all cursor-pointer"
             title="새로고침"
           >
-            <RefreshCw size={14} className={isScanning ? "animate-spin" : ""} />
+            <RefreshCw size={15} className={isScanning ? "animate-spin" : ""} />
           </button>
           <button
             onClick={handleExecuteNow}
             disabled={isScanning || stats.pendingActions === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-50 hover:bg-amber-100 border border-amber-200 hover:border-amber-300 text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-50 hover:bg-amber-100 border border-amber-200 hover:border-amber-300 text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer"
           >
-            <Zap size={12} />
+            <Zap size={13} />
             액션 실행
             {stats.pendingActions > 0 && (
-              <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full leading-none">
+              <span className="bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full leading-none">
                 {stats.pendingActions}
               </span>
             )}
@@ -290,16 +290,16 @@ export default function Dashboard() {
           <button
             onClick={handleScanNow}
             disabled={isScanning}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-400 text-blue-700 disabled:opacity-50 rounded-lg transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-400 text-blue-700 disabled:opacity-50 rounded-xl transition-all cursor-pointer"
           >
-            <ScanLine size={12} />
+            <ScanLine size={13} />
             {isScanning ? "스캔 중..." : "지금 스캔"}
           </button>
         </div>
       </div>
 
       {/* KPI 카드 */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending} color="text-slate-600" borderColor="border-slate-200" />
         <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress} color="text-blue-600" borderColor="border-blue-200" />
         <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done} color="text-emerald-600" borderColor="border-emerald-200" />
@@ -330,7 +330,7 @@ export default function Dashboard() {
       </div>
 
       {/* 섹션 탭 */}
-      <div className="flex items-center gap-0.5 border-b border-[var(--border2)]">
+      <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1.5 w-fit shadow-[var(--shadow-card)]">
         <SectionTab
           active={activeSection === "tasks"}
           onClick={() => setActiveSection("tasks")}
@@ -397,7 +397,7 @@ export default function Dashboard() {
                   strategy={verticalListSortingStrategy}
                 >
                   <motion.div
-                    className="space-y-2.5"
+                    className="space-y-3"
                     variants={containerVariants}
                     initial="hidden"
                     animate="visible"
@@ -442,7 +442,7 @@ export default function Dashboard() {
               />
             ) : (
               <motion.div
-                className="grid grid-cols-1 md:grid-cols-2 gap-2.5"
+                className="grid grid-cols-1 md:grid-cols-2 gap-4"
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
@@ -511,20 +511,20 @@ function KpiCard({
 }) {
   return (
     <motion.div
-      whileHover={onClick ? { scale: 1.03 } : {}}
+      whileHover={onClick ? { y: -2 } : {}}
       whileTap={onClick ? { scale: 0.97 } : {}}
       onClick={onClick}
-      className={`relative bg-[var(--surface)] border ${borderColor} rounded-xl px-3 py-3 shadow-sm transition-all ${
-        onClick ? "cursor-pointer hover:shadow-md" : ""
+      className={`relative bg-[var(--surface)] border ${borderColor} rounded-xl px-4 py-4 shadow-[var(--shadow-card)] transition-all ${
+        onClick ? "cursor-pointer hover:shadow-[var(--shadow-card-hover)]" : ""
       } ${alert ? "glow-amber" : ""}`}
     >
-      <div className={`flex items-center gap-1.5 mb-1.5 ${color} opacity-70`}>
+      <div className={`flex items-center gap-2 mb-2 ${color} opacity-70`}>
         {icon}
-        <span className="text-[10px] font-medium">{label}</span>
+        <span className="text-xs font-medium">{label}</span>
       </div>
-      <div className={`text-2xl font-bold tracking-tight ${color}`}>{value}</div>
+      <div className={`text-3xl font-bold tracking-tight ${color}`}>{value}</div>
       {alert && value > 0 && (
-        <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+        <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-amber-400 animate-soft-pulse" />
       )}
     </motion.div>
   );
@@ -532,11 +532,11 @@ function KpiCard({
 
 function ConnStatus({ label, connected }: { label: string; connected?: boolean }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
+    <div className="flex items-center gap-2">
+      <div className={`w-2 h-2 rounded-full transition-colors ${
         connected === undefined ? "bg-slate-300" : connected ? "bg-emerald-500 shadow-sm shadow-emerald-400/50" : "bg-red-500"
       }`} />
-      <span className="text-[11px] text-slate-500">{label}</span>
+      <span className="text-xs text-slate-500">{label}</span>
     </div>
   );
 }
@@ -555,21 +555,21 @@ function SectionTab({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-4 pb-2.5 pt-1 text-sm font-medium transition-all border-b-2 cursor-pointer ${
+      className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium transition-all rounded-lg cursor-pointer ${
         active
-          ? `${activeColor} border-current`
-          : "border-transparent text-slate-500 hover:text-slate-800"
+          ? `${activeColor} bg-white shadow-sm`
+          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
       }`}
     >
       {icon}
       {label}
       {count !== undefined && (
         badge ? (
-          <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full leading-none">
+          <span className="text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded-full leading-none ml-1">
             {count}
           </span>
         ) : (
-          <span className="text-xs opacity-50">{count}</span>
+          <span className="text-xs opacity-50 ml-1">{count}</span>
         )
       )}
     </button>
@@ -586,19 +586,19 @@ function FilterBar({
   activeColor: string;
 }) {
   return (
-    <div className="flex gap-1 bg-[var(--surface2)] border border-[var(--border2)] rounded-xl p-1 w-fit">
+    <div className="flex gap-1 bg-[var(--surface2)] border border-[var(--border2)] rounded-xl p-1.5 w-fit">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           onClick={() => onSelect(tab.key)}
-          className={`px-4 py-1.5 text-sm rounded-lg transition-all cursor-pointer font-medium ${
+          className={`px-4 py-2 text-sm rounded-lg transition-all cursor-pointer font-medium ${
             active === tab.key
-              ? `${activeColor} text-white shadow-sm`
+              ? `${activeColor} text-white shadow-md`
               : "text-slate-500 hover:text-slate-800 hover:bg-[var(--surface)]"
           }`}
         >
           {tab.label}
-          <span className="ml-1.5 text-xs opacity-60">{counts[tab.key] ?? 0}</span>
+          <span className="ml-1.5 text-xs opacity-50">{counts[tab.key] ?? 0}</span>
         </button>
       ))}
     </div>
@@ -607,9 +607,9 @@ function FilterBar({
 
 function LoadingSpinner() {
   return (
-    <div className="flex flex-col items-center justify-center py-20 gap-3">
-      <div className="w-6 h-6 border-2 border-[var(--border2)] border-t-blue-500 rounded-full animate-spin" />
-      <span className="text-sm text-slate-400">로딩 중...</span>
+    <div className="flex flex-col items-center justify-center py-24 gap-3">
+      <div className="w-8 h-8 border-[2.5px] border-[var(--border2)] border-t-blue-500 rounded-full animate-spin" />
+      <span className="text-sm text-slate-500">로딩 중...</span>
     </div>
   );
 }
@@ -619,11 +619,17 @@ function EmptyState({ icon, message, sub }: { icon: React.ReactNode; message: st
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-20 gap-3"
+      className="flex flex-col items-center justify-center py-24 gap-4 border border-dashed border-slate-200 rounded-2xl"
     >
-      {icon}
-      <div className="text-sm text-slate-500 font-medium">{message}</div>
-      {sub && <div className="text-xs text-slate-400">{sub}</div>}
+      <motion.div
+        animate={{ y: [0, -4, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center"
+      >
+        {icon}
+      </motion.div>
+      <div className="text-base text-slate-600 font-medium">{message}</div>
+      {sub && <div className="text-sm text-slate-400">{sub}</div>}
     </motion.div>
   );
 }
@@ -672,18 +678,19 @@ function ReportCard({ report }: { report: DailyReport }) {
   })();
 
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border2)] rounded-xl p-4 hover:border-purple-300 hover:shadow-sm transition-all">
-      <div className="flex items-center justify-between mb-3">
+    <div className="relative bg-[var(--surface)] border border-[var(--border2)] rounded-xl p-5 hover:border-purple-300 hover:shadow-[var(--shadow-card-hover)] transition-all overflow-hidden">
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-purple-400 rounded-l-xl" />
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <CalendarDays size={13} className="text-purple-500" />
-          <span className="text-sm font-medium text-slate-700">{report.date}</span>
+          <CalendarDays size={14} className="text-purple-500" />
+          <span className="text-[15px] font-medium text-slate-700">{report.date}</span>
           {report.slackMessageTs && (
-            <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+            <span className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
               Slack 발송됨
             </span>
           )}
         </div>
-        <span className="text-[10px] text-slate-400">{report.createdAt.slice(11, 16)}</span>
+        <span className="text-xs text-slate-400">{report.createdAt.slice(11, 16)}</span>
       </div>
 
       {summary ? (
@@ -694,9 +701,9 @@ function ReportCard({ report }: { report: DailyReport }) {
             { label: "7일 완료", value: summary.done7d     ?? 0,  color: "text-emerald-600" },
             { label: "대기 액션",value: pendingCount,              color: pendingCount > 0 ? "text-amber-600" : "text-slate-400" },
           ].map((item) => (
-            <div key={item.label} className="bg-[var(--surface2)] rounded-lg p-2 text-center">
-              <div className={`text-lg font-bold ${item.color}`}>{item.value}</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">{item.label}</div>
+            <div key={item.label} className="bg-[var(--surface2)] rounded-xl p-3 text-center">
+              <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{item.label}</div>
             </div>
           ))}
         </div>

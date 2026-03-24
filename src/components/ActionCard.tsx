@@ -131,40 +131,40 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
     <motion.div
       layout
       className={cn(
-        "relative bg-[var(--surface)] border rounded-xl p-4 transition-all overflow-hidden shadow-sm",
+        "relative border rounded-2xl p-5 transition-all overflow-hidden",
         isProposed
-          ? "border-amber-200 hover:border-amber-400 hover:shadow-md"
+          ? "bg-amber-50/30 border-amber-200 hover:border-amber-400 hover:shadow-[var(--shadow-card-hover)] shadow-[var(--shadow-card)]"
           : isCancelled
-          ? "border-[var(--border)] opacity-50"
-          : "border-emerald-200 opacity-70"
+          ? "bg-[var(--surface)] border-[var(--border)] opacity-50"
+          : "bg-[var(--surface)] border-emerald-200 opacity-70 shadow-[var(--shadow-card)]"
       )}
     >
       {/* 상단 액션 타입 바 */}
-      <div className={cn("absolute top-0 left-0 right-0 h-0.5", isProposed ? "bg-gradient-to-r from-amber-400 to-orange-400" : "bg-transparent")} />
+      <div className={cn("absolute top-0 left-0 right-0 h-1", isProposed ? "bg-gradient-to-r from-amber-400 to-amber-500" : "bg-transparent")} />
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-2.5">
+      <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn("flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border", typeConfig.color, typeConfig.bg, typeConfig.border)}>
+          <span className={cn("flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg border", typeConfig.color, typeConfig.bg, typeConfig.border)}>
             {typeConfig.icon}
             {typeConfig.label}
           </span>
-          <span className={cn("flex items-center gap-1 text-[11px]", statusConfig.color)}>
+          <span className={cn("flex items-center gap-1 text-xs", statusConfig.color)}>
             {statusConfig.icon}
             {statusConfig.label}
           </span>
         </div>
-        <span className="text-[10px] text-slate-400 flex-shrink-0">
+        <span className="text-xs text-slate-400 flex-shrink-0">
           {action.proposedAt?.split("T")[0]}
         </span>
       </div>
 
       {/* 설명 */}
-      <p className="text-xs text-slate-700 leading-relaxed mb-2.5">{action.description}</p>
+      <p className="text-sm text-slate-700 leading-relaxed mb-3">{action.description}</p>
 
       {/* 연결된 TO-DO */}
       {action.task && (
-        <div className="text-[11px] text-slate-500 mb-2.5 flex items-center gap-1">
+        <div className="text-xs text-slate-500 mb-3 flex items-center gap-1 bg-slate-50 rounded-lg px-2.5 py-1.5">
           <span>→</span>
           <span className="text-slate-600 truncate">{action.task.title}</span>
         </div>
@@ -222,15 +222,15 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
 
       {/* 승인/거절 버튼 */}
       {isProposed && (
-        <div className="flex gap-2 pt-2.5 border-t border-[var(--border2)]">
+        <div className="flex gap-3 pt-4 mt-1 border-t border-[var(--border2)]">
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => handleAction("approved")}
             disabled={isProcessing}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer"
+            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-semibold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 text-white rounded-xl shadow-md shadow-blue-500/20 transition-all cursor-pointer"
           >
-            <Check size={12} />
+            <Check size={14} />
             {isProcessing ? "처리 중..." : "승인 · 실행"}
           </motion.button>
           <motion.button
@@ -238,9 +238,9 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
             whileTap={{ scale: 0.97 }}
             onClick={() => handleAction("rejected")}
             disabled={isProcessing}
-            className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-[var(--surface2)] hover:bg-[var(--surface3)] border border-[var(--border2)] text-slate-500 hover:text-slate-800 rounded-lg transition-all cursor-pointer"
+            className="flex items-center justify-center gap-1 px-4 py-2.5 text-sm bg-[var(--surface2)] hover:bg-[var(--surface3)] border border-slate-300 text-slate-500 hover:text-slate-800 rounded-xl transition-all cursor-pointer"
           >
-            <X size={12} />
+            <X size={14} />
             거절
           </motion.button>
         </div>

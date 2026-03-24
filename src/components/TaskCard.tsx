@@ -113,31 +113,31 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
     <motion.div
       layout
       className={cn(
-        "group relative bg-[var(--surface)] border rounded-xl overflow-hidden transition-all duration-200 shadow-sm",
+        "group relative bg-[var(--surface)] border rounded-2xl overflow-hidden transition-all duration-200 shadow-[var(--shadow-card)]",
         isDone
           ? "border-[var(--border)] opacity-60"
           : isDue
           ? "border-red-300 shadow-red-100"
           : isDueSoon
           ? "border-amber-300"
-          : "border-[var(--border2)] hover:border-blue-300 hover:shadow-md"
+          : "border-[var(--border2)] hover:border-blue-300 hover:shadow-[var(--shadow-card-hover)]"
       )}
     >
       {/* 왼쪽 우선순위 바 */}
       <div className={cn(
-        "absolute left-0 top-0 bottom-0 w-0.5",
+        "absolute left-0 top-0 bottom-0 w-[3px]",
         task.priority === "high" ? "bg-red-500" : task.priority === "medium" ? "bg-amber-400" : "bg-slate-300"
       )} />
 
-      <div className="px-4 py-3.5 pl-5">
+      <div className="px-5 py-4 pl-6">
         {/* Header */}
         <div className="flex items-start gap-3">
           {/* 상태 닷 + 제목 */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <div className={cn("w-2 h-2 rounded-full flex-shrink-0 mt-0.5", STATUS_DOT[task.status] || "bg-slate-400")} />
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5", STATUS_DOT[task.status] || "bg-slate-400")} />
               <h3 className={cn(
-                "text-sm font-medium leading-snug truncate",
+                "text-[15px] font-semibold leading-snug truncate",
                 isDone ? "line-through text-slate-400" : "text-slate-800"
               )}>
                 {task.title}
@@ -148,7 +148,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
             </div>
 
             {/* 메타 정보 */}
-            <div className="flex items-center gap-3 ml-4">
+            <div className="flex items-center gap-3 ml-5 mt-1">
               {isDue && (
                 <span className="flex items-center gap-1 text-[11px] text-red-500 font-medium">
                   <AlertCircle size={10} />
@@ -170,20 +170,20 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
           </div>
 
           {/* 우측 액션 */}
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-80 transition-opacity">
             {task.description && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
               >
-                {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
             )}
             <button
               onClick={handleDelete}
-              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
             >
-              <Trash2 size={13} />
+              <Trash2 size={14} />
             </button>
           </div>
         </div>
@@ -201,19 +201,19 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
         )}
 
         {/* 상태 버튼 + 링크 */}
-        <div className="flex items-center justify-between mt-3 ml-4 gap-2">
+        <div className="flex items-center justify-between mt-4 ml-5 gap-2">
           {/* 상태 토글 */}
-          <div className="flex gap-1">
+          <div className="flex gap-1 bg-slate-50 rounded-lg p-0.5 border border-slate-100">
             {STATUSES.map((s) => (
               <button
                 key={s}
                 onClick={() => handleStatusChange(s)}
                 disabled={isUpdating}
                 className={cn(
-                  "px-2.5 py-1 text-[11px] rounded-full font-medium transition-all cursor-pointer",
+                  "px-3 py-1.5 text-xs rounded-md font-medium transition-all cursor-pointer",
                   task.status === s
                     ? cn(STATUS_COLORS[s], "text-white shadow-sm")
-                    : "bg-[var(--surface2)] text-slate-500 hover:text-slate-700 hover:bg-[var(--surface3)]"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-white"
                 )}
               >
                 {STATUS_LABELS[s]}
@@ -222,18 +222,18 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
           </div>
 
           {/* 링크 뱃지 */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {jiraLink && (
               <a
                 href={jiraLink.jiraIssueUrl || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-[11px] rounded-md transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-xs rounded-lg shadow-sm transition-colors"
               >
-                <span className="w-3 h-3 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white">J</span>
+                <span className="w-3.5 h-3.5 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white">J</span>
                 {jiraLink.jiraIssueKey}
                 {jiraLink.jiraStatus && <span className="text-blue-400">· {jiraLink.jiraStatus}</span>}
-                <ExternalLink size={9} className="opacity-50" />
+                <ExternalLink size={10} className="opacity-50" />
               </a>
             )}
             {slackLink && (
@@ -241,11 +241,11 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                 href={slackLink.slackThreadUrl || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600 text-[11px] rounded-md transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600 text-xs rounded-lg shadow-sm transition-colors"
               >
-                <MessageSquare size={9} />
+                <MessageSquare size={10} />
                 Slack
-                <ExternalLink size={9} className="opacity-50" />
+                <ExternalLink size={10} className="opacity-50" />
               </a>
             )}
           </div>
