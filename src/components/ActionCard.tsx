@@ -1,6 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
+import {
+  ArrowRightLeft,
+  MessageSquare,
+  PlusSquare,
+  CheckSquare,
+  RefreshCcw,
+  Check,
+  X,
+  ExternalLink,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Ban,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ActionCardProps {
@@ -19,30 +35,57 @@ interface ActionCardProps {
   onUpdate: () => void;
 }
 
-const ACTION_TYPE_LABELS: Record<string, string> = {
-  jira_transition: "Jira 상태 전환",
-  slack_reply: "Slack 답글",
-  jira_create: "Jira 이슈 생성",
-  todo_create: "TO-DO 생성",
-  todo_complete: "TO-DO 완료 처리",
-  todo_status_change: "TO-DO 상태 변경",
+const ACTION_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string; border: string }> = {
+  jira_transition: {
+    label: "Jira 전환",
+    icon: <ArrowRightLeft size={11} />,
+    color: "text-blue-400",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/20",
+  },
+  slack_reply: {
+    label: "Slack 답글",
+    icon: <MessageSquare size={11} />,
+    color: "text-purple-400",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/20",
+  },
+  jira_create: {
+    label: "Jira 생성",
+    icon: <PlusSquare size={11} />,
+    color: "text-cyan-400",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/20",
+  },
+  todo_create: {
+    label: "TO-DO 생성",
+    icon: <PlusSquare size={11} />,
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/20",
+  },
+  todo_complete: {
+    label: "TO-DO 완료",
+    icon: <CheckSquare size={11} />,
+    color: "text-green-400",
+    bg: "bg-green-500/10",
+    border: "border-green-500/20",
+  },
+  todo_status_change: {
+    label: "TO-DO 상태 변경",
+    icon: <RefreshCcw size={11} />,
+    color: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+  },
 };
 
-const ACTION_TYPE_COLORS: Record<string, string> = {
-  jira_transition: "bg-blue-900/40 text-blue-400 border-blue-700/50",
-  slack_reply: "bg-purple-900/40 text-purple-400 border-purple-700/50",
-  jira_create: "bg-cyan-900/40 text-cyan-400 border-cyan-700/50",
-  todo_create: "bg-emerald-900/40 text-emerald-400 border-emerald-700/50",
-  todo_complete: "bg-green-900/40 text-green-400 border-green-700/50",
-  todo_status_change: "bg-amber-900/40 text-amber-400 border-amber-700/50",
-};
-
-const STATUS_BADGE: Record<string, { label: string; color: string }> = {
-  proposed: { label: "대기", color: "bg-amber-600" },
-  approved: { label: "승인됨", color: "bg-blue-600" },
-  executed: { label: "실행 완료", color: "bg-green-600" },
-  rejected: { label: "거절됨", color: "bg-slate-600" },
-  cancelled: { label: "자동 취소", color: "bg-orange-600" },
+const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  proposed: { label: "대기", icon: <Clock size={10} />, color: "text-amber-400" },
+  approved: { label: "승인됨", icon: <CheckCircle2 size={10} />, color: "text-blue-400" },
+  executed: { label: "완료", icon: <CheckCircle2 size={10} />, color: "text-emerald-400" },
+  rejected: { label: "거절", icon: <XCircle size={10} />, color: "text-slate-500" },
+  cancelled: { label: "자동 취소", icon: <Ban size={10} />, color: "text-orange-400" },
 };
 
 export default function ActionCard({ action, onUpdate }: ActionCardProps) {
@@ -50,15 +93,17 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
 
   const handleAction = async (newStatus: "approved" | "rejected") => {
     setIsProcessing(true);
+    const toastId = toast.loading(newStatus === "approved" ? "승인 후 실행 중..." : "거절 처리 중...");
     try {
       await fetch(`/api/actions/${action.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
+      toast.success(newStatus === "approved" ? "승인 후 실행됨!" : "거절 완료", { id: toastId });
       onUpdate();
-    } catch (error) {
-      console.error("Failed to update action:", error);
+    } catch {
+      toast.error("처리 실패", { id: toastId });
     } finally {
       setIsProcessing(false);
     }
@@ -70,67 +115,81 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
   } catch {
     payload = null;
   }
-  const badge = STATUS_BADGE[action.status] || STATUS_BADGE.proposed;
-  const typeColor = ACTION_TYPE_COLORS[action.actionType] || "bg-slate-800 text-slate-400 border-slate-700";
+
+  const typeConfig = ACTION_TYPE_CONFIG[action.actionType] || {
+    label: action.actionType,
+    icon: <RefreshCcw size={11} />,
+    color: "text-slate-400",
+    bg: "bg-slate-500/10",
+    border: "border-slate-500/20",
+  };
+  const statusConfig = STATUS_CONFIG[action.status] || STATUS_CONFIG.proposed;
+  const isProposed = action.status === "proposed";
+  const isCancelled = action.status === "cancelled" || action.status === "rejected";
 
   return (
-    <div
+    <motion.div
+      layout
       className={cn(
-        "border rounded-xl p-4 transition-all",
-        action.status === "proposed"
-          ? "bg-amber-950/20 border-amber-700/40 hover:border-amber-500/60"
-          : action.status === "executed"
-          ? "bg-green-950/10 border-green-800/30 opacity-70"
-          : action.status === "rejected"
-          ? "bg-slate-900/30 border-slate-700/30 opacity-50"
-          : "bg-[var(--surface)] border-[var(--border)]"
+        "relative bg-[var(--surface)] border rounded-xl p-4 transition-all overflow-hidden",
+        isProposed
+          ? "border-amber-500/30 hover:border-amber-400/50 shadow-sm shadow-amber-500/5"
+          : isCancelled
+          ? "border-[var(--border)] opacity-50"
+          : "border-emerald-800/30 opacity-70"
       )}
     >
+      {/* 상단 액션 타입 바 */}
+      <div className={cn("absolute top-0 left-0 right-0 h-0.5", isProposed ? "bg-gradient-to-r from-amber-500/50 to-orange-500/30" : "bg-transparent")} />
+
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="flex items-start justify-between gap-2 mb-2.5">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* 액션 타입 뱃지 */}
-          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border", typeColor)}>
-            {ACTION_TYPE_LABELS[action.actionType] || action.actionType}
+          <span className={cn("flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border", typeConfig.color, typeConfig.bg, typeConfig.border)}>
+            {typeConfig.icon}
+            {typeConfig.label}
           </span>
-          {/* 상태 뱃지 */}
-          <span className={cn("text-[10px] text-white px-2 py-0.5 rounded-full", badge.color)}>
-            {badge.label}
+          <span className={cn("flex items-center gap-1 text-[11px]", statusConfig.color)}>
+            {statusConfig.icon}
+            {statusConfig.label}
           </span>
         </div>
-        <span className="text-[10px] text-slate-500 whitespace-nowrap">
+        <span className="text-[10px] text-slate-600 flex-shrink-0">
           {action.proposedAt?.split("T")[0]}
         </span>
       </div>
 
       {/* 설명 */}
-      <p className="text-sm text-slate-300 mb-2">{action.description}</p>
+      <p className="text-xs text-slate-300 leading-relaxed mb-2.5">{action.description}</p>
 
       {/* 연결된 TO-DO */}
       {action.task && (
-        <div className="text-xs text-slate-500 mb-3">
-          연결: <span className="text-slate-400">{action.task.title}</span>
+        <div className="text-[11px] text-slate-600 mb-2.5 flex items-center gap-1">
+          <span>→</span>
+          <span className="text-slate-500 truncate">{action.task.title}</span>
         </div>
       )}
 
       {/* Payload 미리보기 */}
       {payload && (
-        <div className="bg-slate-900/50 rounded-lg px-3 py-2 mb-3">
+        <div className="bg-[var(--surface2)] border border-[var(--border2)] rounded-lg px-3 py-2 mb-3 space-y-1">
           {payload.jiraIssueKey && (
-            <div className="text-xs text-slate-400">
-              Jira: <span className="text-blue-400">{payload.jiraIssueKey}</span>
-              {payload.targetStatus && <span className="text-slate-500"> → {payload.targetStatus}</span>}
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
+              <span className="text-blue-400">{payload.jiraIssueKey}</span>
+              {payload.targetStatus && (
+                <span className="text-slate-500">→ <span className="text-slate-300">{payload.targetStatus}</span></span>
+              )}
             </div>
           )}
           {payload.targetTodoStatus && (
-            <div className="text-xs text-slate-400">
-              TO-DO 상태: <span className="text-amber-400">{payload.targetTodoStatus}</span>
-              {payload.reason && <span className="text-slate-500"> ({payload.reason})</span>}
+            <div className="text-[11px] text-slate-400">
+              TO-DO → <span className="text-amber-400">{payload.targetTodoStatus}</span>
             </div>
           )}
           {payload.summary && (
-            <div className="text-xs text-slate-400 mt-1">
-              요약: <span className="text-slate-300">{payload.summary}</span>
+            <div className="text-[11px] text-slate-400 truncate">
+              "{payload.summary}"
             </div>
           )}
           {payload.threadUrl && (
@@ -138,9 +197,11 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
               href={payload.threadUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-purple-400 hover:underline mt-1 inline-block"
+              className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
             >
-              Slack 스레드 보기 →
+              <MessageSquare size={10} />
+              Slack 스레드 보기
+              <ExternalLink size={9} />
             </a>
           )}
         </div>
@@ -148,30 +209,42 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
 
       {/* 실행 결과 */}
       {action.resultLink && (
-        <div className="text-xs text-green-400 mb-2">
-          실행 결과: <a href={action.resultLink} target="_blank" rel="noopener noreferrer" className="underline">{action.resultLink}</a>
-        </div>
+        <a
+          href={action.resultLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-[11px] text-emerald-400 hover:underline mb-2"
+        >
+          <ExternalLink size={10} />
+          실행 결과 보기
+        </a>
       )}
 
-      {/* 액션 버튼 (proposed 상태에서만) */}
-      {action.status === "proposed" && (
-        <div className="flex gap-2 mt-3 pt-3 border-t border-[var(--border)]">
-          <button
+      {/* 승인/거절 버튼 */}
+      {isProposed && (
+        <div className="flex gap-2 pt-2.5 border-t border-[var(--border2)]">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => handleAction("approved")}
             disabled={isProcessing}
-            className="flex-1 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-lg transition-colors cursor-pointer font-medium"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer"
           >
-            {isProcessing ? "처리 중..." : "승인"}
-          </button>
-          <button
+            <Check size={12} />
+            {isProcessing ? "처리 중..." : "승인 · 실행"}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => handleAction("rejected")}
             disabled={isProcessing}
-            className="flex-1 px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-slate-300 rounded-lg transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-[var(--surface2)] hover:bg-[var(--surface3)] border border-[var(--border2)] text-slate-400 hover:text-slate-200 rounded-lg transition-all cursor-pointer"
           >
+            <X size={12} />
             거절
-          </button>
+          </motion.button>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
