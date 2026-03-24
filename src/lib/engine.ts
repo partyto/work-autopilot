@@ -129,7 +129,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
         key: i.key,
         summary: i.fields.summary,
         status: i.fields.status.name,
-        url: `${JIRA_SITE}/browse/${i.key}`,
+        url: `${process.env.JIRA_SITE_URL || "https://catchtable.atlassian.net"}/browse/${i.key}`,
       }));
 
       // Jira ↔ TO-DO 동기화
