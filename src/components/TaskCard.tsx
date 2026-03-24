@@ -13,7 +13,7 @@ import {
   ChevronUp,
   Flag,
 } from "lucide-react";
-import { STATUS_LABELS, STATUS_COLORS, PRIORITY_COLORS, cn } from "@/lib/utils";
+import { STATUS_LABELS, STATUS_COLORS, cn } from "@/lib/utils";
 
 interface TaskLink {
   id: string;
@@ -44,16 +44,16 @@ interface TaskCardProps {
 const STATUSES = ["pending", "in_progress", "done", "cancelled"] as const;
 
 const STATUS_DOT: Record<string, string> = {
-  pending: "bg-slate-500",
+  pending: "bg-slate-400",
   in_progress: "bg-blue-500",
   done: "bg-emerald-500",
-  cancelled: "bg-gray-600",
+  cancelled: "bg-gray-400",
 };
 
 const PRIORITY_ICON_COLOR: Record<string, string> = {
-  high: "text-red-400",
-  medium: "text-amber-400",
-  low: "text-slate-500",
+  high: "text-red-500",
+  medium: "text-amber-500",
+  low: "text-slate-400",
 };
 
 export default function TaskCard({ task, onUpdate }: TaskCardProps) {
@@ -113,20 +113,20 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
     <motion.div
       layout
       className={cn(
-        "group relative bg-[var(--surface)] border rounded-xl overflow-hidden transition-all duration-200",
+        "group relative bg-[var(--surface)] border rounded-xl overflow-hidden transition-all duration-200 shadow-sm",
         isDone
           ? "border-[var(--border)] opacity-60"
           : isDue
-          ? "border-red-500/40 shadow-sm shadow-red-500/10"
+          ? "border-red-300 shadow-red-100"
           : isDueSoon
-          ? "border-amber-500/30"
-          : "border-[var(--border2)] hover:border-blue-500/30 hover:shadow-sm hover:shadow-blue-500/5"
+          ? "border-amber-300"
+          : "border-[var(--border2)] hover:border-blue-300 hover:shadow-md"
       )}
     >
       {/* 왼쪽 우선순위 바 */}
       <div className={cn(
         "absolute left-0 top-0 bottom-0 w-0.5",
-        task.priority === "high" ? "bg-red-500" : task.priority === "medium" ? "bg-amber-500" : "bg-slate-600"
+        task.priority === "high" ? "bg-red-500" : task.priority === "medium" ? "bg-amber-400" : "bg-slate-300"
       )} />
 
       <div className="px-4 py-3.5 pl-5">
@@ -135,34 +135,34 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
           {/* 상태 닷 + 제목 */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <div className={cn("w-2 h-2 rounded-full flex-shrink-0 mt-0.5", STATUS_DOT[task.status] || "bg-slate-500")} />
+              <div className={cn("w-2 h-2 rounded-full flex-shrink-0 mt-0.5", STATUS_DOT[task.status] || "bg-slate-400")} />
               <h3 className={cn(
                 "text-sm font-medium leading-snug truncate",
-                isDone ? "line-through text-slate-500" : "text-slate-100"
+                isDone ? "line-through text-slate-400" : "text-slate-800"
               )}>
                 {task.title}
               </h3>
               {task.priority === "high" && (
-                <Flag size={11} className="text-red-400 flex-shrink-0" />
+                <Flag size={11} className="text-red-500 flex-shrink-0" />
               )}
             </div>
 
             {/* 메타 정보 */}
             <div className="flex items-center gap-3 ml-4">
               {isDue && (
-                <span className="flex items-center gap-1 text-[11px] text-red-400 font-medium">
+                <span className="flex items-center gap-1 text-[11px] text-red-500 font-medium">
                   <AlertCircle size={10} />
                   기한 초과 {task.dueDate}
                 </span>
               )}
               {isDueSoon && !isDue && (
-                <span className="text-[11px] text-amber-400">⏰ {task.dueDate}</span>
+                <span className="text-[11px] text-amber-500">⏰ {task.dueDate}</span>
               )}
               {!isDue && !isDueSoon && task.dueDate && (
-                <span className="text-[11px] text-slate-600">{task.dueDate}</span>
+                <span className="text-[11px] text-slate-400">{task.dueDate}</span>
               )}
               {hasNoLinks && (
-                <span className="flex items-center gap-1 text-[11px] text-slate-600">
+                <span className="flex items-center gap-1 text-[11px] text-slate-400">
                   <Link2Off size={10} />연결 없음
                 </span>
               )}
@@ -174,14 +174,14 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
             {task.description && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="p-1.5 text-slate-600 hover:text-slate-300 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
               >
                 {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
             )}
             <button
               onClick={handleDelete}
-              className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer"
+              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
             >
               <Trash2 size={13} />
             </button>
@@ -213,7 +213,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                   "px-2.5 py-1 text-[11px] rounded-full font-medium transition-all cursor-pointer",
                   task.status === s
                     ? cn(STATUS_COLORS[s], "text-white shadow-sm")
-                    : "bg-[var(--surface2)] text-slate-500 hover:text-slate-200 hover:bg-[var(--surface3)]"
+                    : "bg-[var(--surface2)] text-slate-500 hover:text-slate-700 hover:bg-[var(--surface3)]"
                 )}
               >
                 {STATUS_LABELS[s]}
@@ -228,11 +228,11 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                 href={jiraLink.jiraIssueUrl || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-[11px] rounded-md transition-colors"
+                className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-[11px] rounded-md transition-colors"
               >
                 <span className="w-3 h-3 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white">J</span>
                 {jiraLink.jiraIssueKey}
-                {jiraLink.jiraStatus && <span className="text-blue-300/50">· {jiraLink.jiraStatus}</span>}
+                {jiraLink.jiraStatus && <span className="text-blue-400">· {jiraLink.jiraStatus}</span>}
                 <ExternalLink size={9} className="opacity-50" />
               </a>
             )}
@@ -241,7 +241,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                 href={slackLink.slackThreadUrl || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-0.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 text-[11px] rounded-md transition-colors"
+                className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600 text-[11px] rounded-md transition-colors"
               >
                 <MessageSquare size={9} />
                 Slack

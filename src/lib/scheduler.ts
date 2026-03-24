@@ -7,33 +7,33 @@ export function initScheduler() {
   if (initialized) return;
   initialized = true;
 
-  // 매일 평일 17:30 KST — 일일 스캔 + 리포트 발송
-  cron.schedule("30 17 * * 1-5", async () => {
-    console.log(`[Scheduler] Daily scan started at ${new Date().toISOString()}`);
+  // 30분 간격 — Jira+Slack 스캔 + 액션 제안 (DM 없음, 새 액션 제안 시에만 알림)
+  cron.schedule("*/30 * * * 1-5", async () => {
+    console.log(`[Scheduler] Auto scan started at ${new Date().toISOString()}`);
     try {
-      await runDailyScan();
-      await executeApprovedActions(); // 스캔 직후 승인된 액션 즉시 실행
-      console.log(`[Scheduler] Daily scan completed`);
-    } catch (error) {
-      console.error("[Scheduler] Daily scan failed:", error);
-    }
-  }, {
-    timezone: "Asia/Seoul",
-  });
-
-  // 평일 2시간 간격 — 승인된 액션 실행
-  cron.schedule("0 10,12,14,16,18 * * 1-5", async () => {
-    console.log(`[Scheduler] Action executor started at ${new Date().toISOString()}`);
-    try {
-      const { executeApprovedActions } = await import("./engine");
+      await runDailyScan(false); // 스캔만, 일일 리포트 DM 없음
       await executeApprovedActions();
-      console.log(`[Scheduler] Action executor completed`);
+      console.log(`[Scheduler] Auto scan completed`);
     } catch (error) {
-      console.error("[Scheduler] Action executor failed:", error);
+      console.error("[Scheduler] Auto scan failed:", error);
     }
   }, {
     timezone: "Asia/Seoul",
   });
 
-  console.log("[Scheduler] Initialized — Daily scan: 17:30 KST (Mon-Fri), Executor: 10/12/14/16/18h KST (Mon-Fri)");
+  // 매일 평일 17:30 KST — 일일 요약 리포트 + Slack DM 발송
+  cron.schedule("30 17 * * 1-5", async () => {
+    console.log(`[Scheduler] Daily report started at ${new Date().toISOString()}`);
+    try {
+      await runDailyScan(true); // 스캔 + 일일 리포트 DM 발송
+      await executeApprovedActions();
+      console.log(`[Scheduler] Daily report completed`);
+    } catch (error) {
+      console.error("[Scheduler] Daily report failed:", error);
+    }
+  }, {
+    timezone: "Asia/Seoul",
+  });
+
+  console.log("[Scheduler] Initialized — Auto scan: every 30min (Mon-Fri), Daily report: 17:30 KST (Mon-Fri)");
 }

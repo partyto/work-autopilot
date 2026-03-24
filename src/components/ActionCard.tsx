@@ -39,53 +39,53 @@ const ACTION_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode;
   jira_transition: {
     label: "Jira 전환",
     icon: <ArrowRightLeft size={11} />,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10",
-    border: "border-blue-500/20",
+    color: "text-blue-600",
+    bg: "bg-blue-50",
+    border: "border-blue-200",
   },
   slack_reply: {
     label: "Slack 답글",
     icon: <MessageSquare size={11} />,
-    color: "text-purple-400",
-    bg: "bg-purple-500/10",
-    border: "border-purple-500/20",
+    color: "text-purple-600",
+    bg: "bg-purple-50",
+    border: "border-purple-200",
   },
   jira_create: {
     label: "Jira 생성",
     icon: <PlusSquare size={11} />,
-    color: "text-cyan-400",
-    bg: "bg-cyan-500/10",
-    border: "border-cyan-500/20",
+    color: "text-cyan-600",
+    bg: "bg-cyan-50",
+    border: "border-cyan-200",
   },
   todo_create: {
     label: "TO-DO 생성",
     icon: <PlusSquare size={11} />,
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/20",
+    color: "text-emerald-600",
+    bg: "bg-emerald-50",
+    border: "border-emerald-200",
   },
   todo_complete: {
     label: "TO-DO 완료",
     icon: <CheckSquare size={11} />,
-    color: "text-green-400",
-    bg: "bg-green-500/10",
-    border: "border-green-500/20",
+    color: "text-green-600",
+    bg: "bg-green-50",
+    border: "border-green-200",
   },
   todo_status_change: {
     label: "TO-DO 상태 변경",
     icon: <RefreshCcw size={11} />,
-    color: "text-amber-400",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/20",
+    color: "text-amber-600",
+    bg: "bg-amber-50",
+    border: "border-amber-200",
   },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  proposed: { label: "대기", icon: <Clock size={10} />, color: "text-amber-400" },
-  approved: { label: "승인됨", icon: <CheckCircle2 size={10} />, color: "text-blue-400" },
-  executed: { label: "완료", icon: <CheckCircle2 size={10} />, color: "text-emerald-400" },
+  proposed: { label: "대기", icon: <Clock size={10} />, color: "text-amber-600" },
+  approved: { label: "승인됨", icon: <CheckCircle2 size={10} />, color: "text-blue-600" },
+  executed: { label: "완료", icon: <CheckCircle2 size={10} />, color: "text-emerald-600" },
   rejected: { label: "거절", icon: <XCircle size={10} />, color: "text-slate-500" },
-  cancelled: { label: "자동 취소", icon: <Ban size={10} />, color: "text-orange-400" },
+  cancelled: { label: "자동 취소", icon: <Ban size={10} />, color: "text-orange-500" },
 };
 
 export default function ActionCard({ action, onUpdate }: ActionCardProps) {
@@ -119,9 +119,9 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
   const typeConfig = ACTION_TYPE_CONFIG[action.actionType] || {
     label: action.actionType,
     icon: <RefreshCcw size={11} />,
-    color: "text-slate-400",
-    bg: "bg-slate-500/10",
-    border: "border-slate-500/20",
+    color: "text-slate-600",
+    bg: "bg-slate-100",
+    border: "border-slate-300",
   };
   const statusConfig = STATUS_CONFIG[action.status] || STATUS_CONFIG.proposed;
   const isProposed = action.status === "proposed";
@@ -131,16 +131,16 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
     <motion.div
       layout
       className={cn(
-        "relative bg-[var(--surface)] border rounded-xl p-4 transition-all overflow-hidden",
+        "relative bg-[var(--surface)] border rounded-xl p-4 transition-all overflow-hidden shadow-sm",
         isProposed
-          ? "border-amber-500/30 hover:border-amber-400/50 shadow-sm shadow-amber-500/5"
+          ? "border-amber-200 hover:border-amber-400 hover:shadow-md"
           : isCancelled
           ? "border-[var(--border)] opacity-50"
-          : "border-emerald-800/30 opacity-70"
+          : "border-emerald-200 opacity-70"
       )}
     >
       {/* 상단 액션 타입 바 */}
-      <div className={cn("absolute top-0 left-0 right-0 h-0.5", isProposed ? "bg-gradient-to-r from-amber-500/50 to-orange-500/30" : "bg-transparent")} />
+      <div className={cn("absolute top-0 left-0 right-0 h-0.5", isProposed ? "bg-gradient-to-r from-amber-400 to-orange-400" : "bg-transparent")} />
 
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2.5">
@@ -154,19 +154,19 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
             {statusConfig.label}
           </span>
         </div>
-        <span className="text-[10px] text-slate-600 flex-shrink-0">
+        <span className="text-[10px] text-slate-400 flex-shrink-0">
           {action.proposedAt?.split("T")[0]}
         </span>
       </div>
 
       {/* 설명 */}
-      <p className="text-xs text-slate-300 leading-relaxed mb-2.5">{action.description}</p>
+      <p className="text-xs text-slate-700 leading-relaxed mb-2.5">{action.description}</p>
 
       {/* 연결된 TO-DO */}
       {action.task && (
-        <div className="text-[11px] text-slate-600 mb-2.5 flex items-center gap-1">
+        <div className="text-[11px] text-slate-500 mb-2.5 flex items-center gap-1">
           <span>→</span>
-          <span className="text-slate-500 truncate">{action.task.title}</span>
+          <span className="text-slate-600 truncate">{action.task.title}</span>
         </div>
       )}
 
@@ -176,19 +176,19 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
           {payload.jiraIssueKey && (
             <div className="flex items-center gap-1.5 text-[11px]">
               <span className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
-              <span className="text-blue-400">{payload.jiraIssueKey}</span>
+              <span className="text-blue-600">{payload.jiraIssueKey}</span>
               {payload.targetStatus && (
-                <span className="text-slate-500">→ <span className="text-slate-300">{payload.targetStatus}</span></span>
+                <span className="text-slate-500">→ <span className="text-slate-700">{payload.targetStatus}</span></span>
               )}
             </div>
           )}
           {payload.targetTodoStatus && (
-            <div className="text-[11px] text-slate-400">
-              TO-DO → <span className="text-amber-400">{payload.targetTodoStatus}</span>
+            <div className="text-[11px] text-slate-600">
+              TO-DO → <span className="text-amber-600">{payload.targetTodoStatus}</span>
             </div>
           )}
           {payload.summary && (
-            <div className="text-[11px] text-slate-400 truncate">
+            <div className="text-[11px] text-slate-600 truncate">
               "{payload.summary}"
             </div>
           )}
@@ -197,7 +197,7 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
               href={payload.threadUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
+              className="flex items-center gap-1 text-[11px] text-purple-600 hover:text-purple-700 transition-colors"
             >
               <MessageSquare size={10} />
               Slack 스레드 보기
@@ -213,7 +213,7 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
           href={action.resultLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 text-[11px] text-emerald-400 hover:underline mb-2"
+          className="flex items-center gap-1 text-[11px] text-emerald-600 hover:underline mb-2"
         >
           <ExternalLink size={10} />
           실행 결과 보기
@@ -228,7 +228,7 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
             whileTap={{ scale: 0.97 }}
             onClick={() => handleAction("approved")}
             disabled={isProcessing}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors cursor-pointer"
           >
             <Check size={12} />
             {isProcessing ? "처리 중..." : "승인 · 실행"}
@@ -238,7 +238,7 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
             whileTap={{ scale: 0.97 }}
             onClick={() => handleAction("rejected")}
             disabled={isProcessing}
-            className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-[var(--surface2)] hover:bg-[var(--surface3)] border border-[var(--border2)] text-slate-400 hover:text-slate-200 rounded-lg transition-all cursor-pointer"
+            className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-[var(--surface2)] hover:bg-[var(--surface3)] border border-[var(--border2)] text-slate-500 hover:text-slate-800 rounded-lg transition-all cursor-pointer"
           >
             <X size={12} />
             거절
