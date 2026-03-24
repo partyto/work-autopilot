@@ -122,7 +122,25 @@ export async function runDailyScan() {
     report.push("⚠️ Jira API 미설정 — JIRA_USER_EMAIL, JIRA_API_TOKEN 필요");
   }
 
-  // --- Step 2: 승인 대기 액션 수 ---
+  // --- Step 2: Slack 멘션 스캔 ---
+  if (slack.isSlackConfigured()) {
+    try {
+      const slackResults = await scanSlackMentions();
+      if (slackResults.mentions > 0) {
+        report.push(`\n*💬 Slack 멘션 (${slackResults.mentions}건)*`);
+        slackResults.items.forEach((item) => {
+          report.push(`• #${item.channel} — ${item.preview}`);
+        });
+        if (slackResults.newActions > 0) {
+          report.push(`→ ${slackResults.newActions}건 액션 제안됨`);
+        }
+      }
+    } catch (error) {
+      console.warn("[Engine] Slack scan skipped:", error);
+    }
+  }
+
+  // --- Step 3.5: 승인 대기 액션 수 ---
   const pendingActions = await db.query.actions.findMany({
     where: eq(schema.actions.status, "proposed" as any),
   });
@@ -174,6 +192,110 @@ export async function runDailyScan() {
   }
 
   return message;
+}
+
+// ===== Slack 멘션 스캔 =====
+// 할일/요청 키워드가 포함된 멘션을 감지하여 TO-DO 생성 또는 답글 액션 제안
+const ACTION_KEYWORDS = [
+  "해줘", "해주세요", "부탁", "할일", "TODO", "todo",
+  "확인해", "확인 부탁", "처리해", "검토해", "리뷰해",
+  "공유해", "전달해", "수정해", "반영해", "업데이트해",
+  "일정", "마감", "기한", "데드라인", "deadline",
+];
+
+async function scanSlackMentions(): Promise<{
+  mentions: number;
+  items: { channel: string; preview: string; permalink: string }[];
+  newActions: number;
+}> {
+  const userId = slack.SLACK_USER_ID;
+  const mentions = await slack.searchMentions(`<@${userId}>`, 30);
+
+  if (mentions.length === 0) {
+    return { mentions: 0, items: [], newActions: 0 };
+  }
+
+  const now = nowLocal();
+  const today = new Date();
+  const oneDayAgo = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  let newActions = 0;
+  const items: { channel: string; preview: string; permalink: string }[] = [];
+
+  // 최근 24시간 멘션만 처리
+  const recentMentions = mentions.filter((m: any) => {
+    const ts = parseFloat(m.ts);
+    return new Date(ts * 1000) >= oneDayAgo;
+  });
+
+  for (const mention of recentMentions.slice(0, 10)) {
+    const text = mention.text || "";
+    const channelName = mention.channel?.name || "DM";
+    const permalink = mention.permalink || "";
+    const threadTs = mention.ts;
+    const channelId = mention.channel?.id;
+
+    // 요약 미리보기
+    const preview = text
+      .replace(/<@[A-Z0-9]+>/g, "@user")
+      .replace(/<[^>]+>/g, "")
+      .substring(0, 60);
+    items.push({ channel: channelName, preview, permalink });
+
+    // 이미 처리된 스레드인지 확인 (같은 threadTs로 링크된 태스크/액션 존재 여부)
+    const existingLink = await db.query.taskLinks.findFirst({
+      where: and(
+        eq(schema.taskLinks.linkType, "slack_thread"),
+        eq(schema.taskLinks.slackThreadTs, threadTs)
+      ),
+    });
+    if (existingLink) continue;
+
+    const existingAction = await db.query.actions.findFirst({
+      where: and(
+        eq(schema.actions.status, "proposed" as any),
+        eq(schema.actions.actionType, "todo_create" as any),
+      ),
+    });
+
+    // 할일 키워드 감지
+    const hasActionKeyword = ACTION_KEYWORDS.some((kw) =>
+      text.toLowerCase().includes(kw.toLowerCase())
+    );
+
+    if (hasActionKeyword && !existingAction) {
+      // 키워드 매칭 → TO-DO 생성 제안
+      // 임시 태스크를 placeholder로 생성 (제안용)
+      const placeholderTaskId = generateId();
+      await db.insert(schema.tasks).values({
+        id: placeholderTaskId,
+        title: `[Slack] ${preview}`,
+        description: `Slack #${channelName}에서 감지된 요청`,
+        sourceType: "slack_detected",
+        status: "pending",
+        priority: "medium",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await db.insert(schema.actions).values({
+        id: generateId(),
+        taskId: placeholderTaskId,
+        actionType: "todo_create",
+        description: `Slack #${channelName}에서 할일 감지: "${preview}"`,
+        payload: JSON.stringify({
+          summary: preview,
+          channelId,
+          threadTs,
+          threadUrl: permalink,
+        }),
+        status: "proposed",
+        proposedAt: now,
+      });
+      newActions++;
+    }
+  }
+
+  return { mentions: recentMentions.length, items: items.slice(0, 5), newActions };
 }
 
 // ===== Jira ↔ TO-DO 양방향 상태 동기화 =====
