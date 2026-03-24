@@ -12,10 +12,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, type: "execute" });
     }
 
-    const report = await runDailyScan();
+    const { message, scanItems } = await runDailyScan();
     // 스캔 후 승인된 액션이 있으면 자동 실행
     await executeApprovedActions();
-    return NextResponse.json({ success: true, type: "scan", report });
+    return NextResponse.json({ success: true, type: "scan", report: message, scanItems });
   } catch (error) {
     console.error("Manual scan failed:", error);
     return NextResponse.json({ error: "스캔 실패: " + String(error) }, { status: 500 });

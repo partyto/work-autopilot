@@ -45,12 +45,20 @@ const TODO_STATUS_LABEL: Record<string, string> = {
 // ===== 일일 스캔 =====
 // sendReport=true → Slack DM 발송 (17:30 일일 리포트용)
 // sendReport=false → 스캔 + 액션 제안만, DM 없음 (30분 자동 스캔용)
-export async function runDailyScan(sendReport: boolean = true) {
+export type ScanResultItem =
+  | { type: "jira"; key: string; summary: string; status: string; url: string }
+  | { type: "slack"; channel: string; preview: string; url: string };
+
+export async function runDailyScan(sendReport: boolean = true): Promise<{
+  message: string;
+  scanItems: ScanResultItem[];
+}> {
   const report: string[] = [];
   const warnings: string[] = [];
   const newlyProposedActions: string[] = [];
   let openIssues: jira.JiraIssue[] = [];
   let doneIssues: jira.JiraIssue[] = [];
+  const scanItems: ScanResultItem[] = [];
 
   // --- Step 1: Jira 스캔 ---
   if (jira.isJiraConfigured()) {
@@ -115,6 +123,15 @@ export async function runDailyScan(sendReport: boolean = true) {
         if (doneIssues.length > 5) report.push(`• ...외 ${doneIssues.length - 5}건`);
       }
 
+      // 스캔 아이템 수집 (대시보드 표시용)
+      openIssues.forEach((i) => scanItems.push({
+        type: "jira",
+        key: i.key,
+        summary: i.fields.summary,
+        status: i.fields.status.name,
+        url: `${JIRA_SITE}/browse/${i.key}`,
+      }));
+
       // Jira ↔ TO-DO 동기화
       const jiraNewActions = await syncJiraStatuses(openIssues.concat(doneIssues));
       jiraNewActions.forEach((d) => newlyProposedActions.push(d));
@@ -165,6 +182,12 @@ export async function runDailyScan(sendReport: boolean = true) {
         report.push(`\n*💬 Slack 멘션 (${slackResults.mentions}건)*`);
         slackResults.items.forEach((item) => {
           report.push(`• #${item.channel} — ${item.preview}`);
+          scanItems.push({
+            type: "slack",
+            channel: item.channel,
+            preview: item.preview.replace(/\n/g, " ").substring(0, 80),
+            url: item.permalink,
+          });
         });
         if (slackResults.newActions > 0) {
           report.push(`→ ${slackResults.newActions}건 액션 제안됨`);
@@ -252,7 +275,7 @@ export async function runDailyScan(sendReport: boolean = true) {
     console.log(message);
   }
 
-  return message;
+  return { message, scanItems };
 }
 
 // ===== Slack 멘션 스캔 =====
@@ -314,7 +337,9 @@ async function scanSlackMentions(): Promise<{
     const preview = text
       .replace(/<@[A-Z0-9]+>/g, "@user")
       .replace(/<[^>]+>/g, "")
-      .substring(0, 60);
+      .replace(/\n+/g, " ")
+      .trim()
+      .substring(0, 80);
     items.push({ channel: channelName, preview, permalink });
 
     // ① 이미 처리된 스레드인지 확인 — task_links 기준 (액션 승인+실행 후)

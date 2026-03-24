@@ -160,7 +160,7 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
       </div>
 
       {/* 설명 */}
-      <p className="text-sm text-slate-700 leading-relaxed mb-3">{action.description}</p>
+      <p className="text-sm text-slate-700 truncate mb-3" title={action.description}>{action.description}</p>
 
       {/* 연결된 TO-DO */}
       {action.task && (
@@ -176,10 +176,18 @@ export default function ActionCard({ action, onUpdate }: ActionCardProps) {
           {payload.jiraIssueKey && (
             <div className="flex items-center gap-1.5 text-[11px]">
               <span className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
-              <span className="text-blue-600">{payload.jiraIssueKey}</span>
+              <a
+                href={`https://catchtable.atlassian.net/browse/${payload.jiraIssueKey}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline font-medium"
+              >
+                {payload.jiraIssueKey}
+              </a>
               {payload.targetStatus && (
                 <span className="text-slate-500">→ <span className="text-slate-700">{payload.targetStatus}</span></span>
               )}
+              <ExternalLink size={9} className="text-blue-400" />
             </div>
           )}
           {payload.targetTodoStatus && (
