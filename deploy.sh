@@ -4,7 +4,7 @@
 
 set -e
 
-WORKSPACE="/Users/catchtable/Library/CloudStorage/SynologyDrive-your4leaf/claude/업무 자동화/업무 자동화/work-autopilot"
+WORKSPACE="/Users/catchtable/Library/CloudStorage/SynologyDrive-your4leaf/claude/업무 자동화/work-autopilot"
 GIT_REPO="/Users/catchtable/work-autopilot"
 NAS_USER="your4leaf"
 NAS_HOST="115.21.223.89"
@@ -36,12 +36,12 @@ fi
 echo ""
 echo "🐳 [3/4] NAS Docker 이미지 Pull 중..."
 ssh -p "$NAS_PORT" "$NAS_USER@$NAS_HOST" \
-  "cd $NAS_PATH && sudo docker compose pull"
+  "cd $NAS_PATH && /usr/local/bin/docker compose pull"
 
 echo ""
 echo "🚀 [4/4] NAS 컨테이너 재시작 중..."
 ssh -p "$NAS_PORT" "$NAS_USER@$NAS_HOST" \
-  "cd $NAS_PATH && sudo docker compose up -d"
+  "cd $NAS_PATH && /usr/local/bin/docker compose up -d"
 
 echo ""
 echo "✅ 배포 완료!"
