@@ -57,6 +57,21 @@ const PRIORITY_ICON_COLOR: Record<string, string> = {
   low: "text-slate-400",
 };
 
+const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
+  slack_detected: {
+    label: "SLACK",
+    className: "bg-purple-100 text-purple-700 border border-purple-200",
+  },
+  jira_sync: {
+    label: "JIRA",
+    className: "bg-blue-100 text-blue-700 border border-blue-200",
+  },
+  manual: {
+    label: "SELF",
+    className: "bg-slate-100 text-slate-600 border border-slate-200",
+  },
+};
+
 export default function TaskCard({ task, onUpdate }: TaskCardProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -137,6 +152,14 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 mb-1.5">
               <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5", STATUS_DOT[task.status] || "bg-slate-400")} />
+              {SOURCE_BADGE[task.sourceType] && (
+                <span className={cn(
+                  "flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none tracking-wide",
+                  SOURCE_BADGE[task.sourceType].className
+                )}>
+                  {SOURCE_BADGE[task.sourceType].label}
+                </span>
+              )}
               <h3 className={cn(
                 "text-[15px] font-semibold leading-snug truncate",
                 isDone ? "line-through text-slate-400" : "text-slate-800"
