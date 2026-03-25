@@ -407,6 +407,17 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
   const now = nowLocal();
   const newActionDescs: string[] = [];
 
+  // 이미 액션이 제안된 Jira 이슈 키 목록 (중복 방지)
+  const existingJiraActions = await db.query.actions.findMany({
+    where: eq(schema.actions.actionType, "todo_create" as any),
+  });
+  const processedJiraKeys = new Set<string>(
+    existingJiraActions.map((a) => {
+      try { return (JSON.parse(a.payload || "{}") as { jiraIssueKey?: string }).jiraIssueKey ?? ""; }
+      catch { return ""; }
+    }).filter(Boolean)
+  );
+
   for (const issue of issues) {
     const link = await db.query.taskLinks.findFirst({
       where: and(
@@ -415,7 +426,57 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
       ),
     });
 
-    if (!link) continue;
+    if (!link) {
+      // 새로 할당된 Jira 이슈 → TO-DO 생성 제안
+      if (processedJiraKeys.has(issue.key)) continue; // 이미 제안됨
+
+      const jiraBase = process.env.JIRA_SITE_URL || "https://catchtable.atlassian.net";
+      const issueUrl = `${jiraBase}/browse/${issue.key}`;
+      const placeholderTaskId = generateId();
+
+      await db.insert(schema.tasks).values({
+        id: placeholderTaskId,
+        title: `${issue.fields.summary}`,
+        description: `Jira ${issue.key} — ${issue.fields.status.name}`,
+        sourceType: "jira_sync",
+        status: "pending",
+        priority: "medium",
+        dueDate: issue.fields.duedate || null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Jira 링크 미리 생성 (다음 스캔 시 중복 방지)
+      await db.insert(schema.taskLinks).values({
+        id: generateId(),
+        taskId: placeholderTaskId,
+        linkType: "jira",
+        jiraIssueKey: issue.key,
+        jiraIssueUrl: issueUrl,
+        jiraStatus: issue.fields.status.name,
+        createdAt: now,
+      });
+
+      const desc = `Jira 새 이슈 할당: ${issue.key} — "${issue.fields.summary}"`;
+      await db.insert(schema.actions).values({
+        id: generateId(),
+        taskId: placeholderTaskId,
+        actionType: "todo_create",
+        description: desc,
+        payload: JSON.stringify({
+          jiraIssueKey: issue.key,
+          jiraIssueUrl: issueUrl,
+          summary: issue.fields.summary,
+          jiraStatus: issue.fields.status.name,
+        }),
+        status: "proposed",
+        proposedAt: now,
+      });
+      newActionDescs.push(desc);
+      processedJiraKeys.add(issue.key);
+      console.log(`[Engine] 새 Jira 이슈 감지: ${issue.key} → TO-DO 제안`);
+      continue;
+    }
 
     const jiraStatus = issue.fields.status.name;
     const prevJiraStatus = link.jiraStatus;
