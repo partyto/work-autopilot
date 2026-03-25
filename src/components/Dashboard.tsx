@@ -122,6 +122,7 @@ export default function Dashboard() {
   const [isScanning, setIsScanning] = useState(false);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [lastScanItems, setLastScanItems] = useState<ScanResultItem[] | null>(null);
+  const [kpiFilter, setKpiFilter] = useState<string | null>(null);
 
   // DnD 센서 설정
   const sensors = useSensors(
@@ -248,8 +249,23 @@ export default function Dashboard() {
     }
   };
 
+  const KPI_FILTERS: Record<string, (t: TaskWithLinks) => boolean> = {
+    pending: (t) => t.status === "pending",
+    in_progress: (t) => t.status === "in_progress",
+    done: (t) => t.status === "done",
+    overdue: (t) => !!t.dueDate && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date(),
+    noLink: (t) => !t.links || t.links.length === 0,
+  };
+
   const currentFilter = FILTER_TABS.find((t) => t.key === activeTab) || FILTER_TABS[0];
-  const filteredTasks = tasks.filter(currentFilter.filter);
+  const filteredTasks = kpiFilter
+    ? tasks.filter(KPI_FILTERS[kpiFilter] ?? (() => true))
+    : tasks.filter(currentFilter.filter);
+
+  const handleKpiClick = (key: string) => {
+    setKpiFilter((prev) => (prev === key ? null : key));
+    setActiveSection("tasks");
+  };
   const currentActionFilter = ACTION_FILTER_TABS.find((t) => t.key === activeActionTab) || ACTION_FILTER_TABS[0];
   const filteredActions = actions.filter(currentActionFilter.filter);
 
@@ -312,9 +328,9 @@ export default function Dashboard() {
 
       {/* KPI 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending} color="text-slate-600" borderColor="border-slate-200" />
-        <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress} color="text-blue-600" borderColor="border-blue-200" />
-        <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done} color="text-emerald-600" borderColor="border-emerald-200" />
+        <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending} color="text-slate-600" borderColor="border-slate-200" active={kpiFilter === "pending"} onClick={() => handleKpiClick("pending")} />
+        <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress} color="text-blue-600" borderColor="border-blue-200" active={kpiFilter === "in_progress"} onClick={() => handleKpiClick("in_progress")} />
+        <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done} color="text-emerald-600" borderColor="border-emerald-200" active={kpiFilter === "done"} onClick={() => handleKpiClick("done")} />
         <KpiCard
           icon={<AlertTriangle size={14} />}
           label="기한 초과"
@@ -322,6 +338,8 @@ export default function Dashboard() {
           color={stats.overdue > 0 ? "text-red-600" : "text-slate-400"}
           borderColor={stats.overdue > 0 ? "border-red-200" : "border-slate-200"}
           alert={stats.overdue > 0}
+          active={kpiFilter === "overdue"}
+          onClick={() => handleKpiClick("overdue")}
         />
         <KpiCard
           icon={<Link2Off size={14} />}
@@ -329,6 +347,8 @@ export default function Dashboard() {
           value={stats.noLink}
           color={stats.noLink > 0 ? "text-yellow-600" : "text-slate-400"}
           borderColor={stats.noLink > 0 ? "border-yellow-200" : "border-slate-200"}
+          active={kpiFilter === "noLink"}
+          onClick={() => handleKpiClick("noLink")}
         />
         <KpiCard
           icon={<Bell size={14} />}
@@ -337,7 +357,7 @@ export default function Dashboard() {
           color={stats.pendingActions > 0 ? "text-amber-600" : "text-slate-400"}
           borderColor={stats.pendingActions > 0 ? "border-amber-200" : "border-slate-200"}
           alert={stats.pendingActions > 0}
-          onClick={() => setActiveSection("actions")}
+          onClick={() => { setKpiFilter(null); setActiveSection("actions"); }}
         />
       </div>
 
@@ -382,13 +402,28 @@ export default function Dashboard() {
           >
             <TaskForm onCreated={handleRefreshAll} />
 
-            <FilterBar
-              tabs={FILTER_TABS}
-              active={activeTab}
-              onSelect={setActiveTab}
-              counts={FILTER_TABS.reduce((acc, t) => ({ ...acc, [t.key]: tasks.filter(t.filter).length }), {} as Record<string, number>)}
-              activeColor="bg-blue-600"
-            />
+            {kpiFilter ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
+                <span className="font-medium">
+                  {{ pending: "대기", in_progress: "진행 중", done: "완료", overdue: "기한 초과", noLink: "연결 없음" }[kpiFilter]} 항목 필터 중
+                </span>
+                <span className="text-blue-400">({filteredTasks.length}건)</span>
+                <button
+                  onClick={() => setKpiFilter(null)}
+                  className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded-lg transition-all"
+                >
+                  <X size={11} /> 필터 해제
+                </button>
+              </div>
+            ) : (
+              <FilterBar
+                tabs={FILTER_TABS}
+                active={activeTab}
+                onSelect={setActiveTab}
+                counts={FILTER_TABS.reduce((acc, t) => ({ ...acc, [t.key]: tasks.filter(t.filter).length }), {} as Record<string, number>)}
+                activeColor="bg-blue-600"
+              />
+            )}
 
             {isLoading ? (
               <LoadingSpinner />
@@ -561,7 +596,7 @@ export default function Dashboard() {
 // ===== 서브 컴포넌트 =====
 
 function KpiCard({
-  icon, label, value, color, borderColor, alert, onClick,
+  icon, label, value, color, borderColor, alert, active, onClick,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -569,24 +604,28 @@ function KpiCard({
   color: string;
   borderColor: string;
   alert?: boolean;
+  active?: boolean;
   onClick?: () => void;
 }) {
   return (
     <motion.div
-      whileHover={onClick ? { y: -2 } : {}}
-      whileTap={onClick ? { scale: 0.97 } : {}}
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className={`relative bg-[var(--surface)] border ${borderColor} rounded-xl px-4 py-4 shadow-[var(--shadow-card)] transition-all ${
-        onClick ? "cursor-pointer hover:shadow-[var(--shadow-card-hover)]" : ""
-      } ${alert ? "glow-amber" : ""}`}
+      className={`relative bg-[var(--surface)] border-2 rounded-xl px-4 py-4 shadow-[var(--shadow-card)] transition-all cursor-pointer hover:shadow-[var(--shadow-card-hover)] ${
+        active ? `${borderColor} ring-2 ring-offset-1 ring-current/20 bg-slate-50` : "border-slate-100"
+      } ${alert && !active ? "glow-amber" : ""}`}
     >
       <div className={`flex items-center gap-2 mb-2 ${color} opacity-70`}>
         {icon}
         <span className="text-xs font-medium">{label}</span>
       </div>
       <div className={`text-3xl font-bold tracking-tight ${color}`}>{value}</div>
-      {alert && value > 0 && (
+      {alert && value > 0 && !active && (
         <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-amber-400 animate-soft-pulse" />
+      )}
+      {active && (
+        <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-500" />
       )}
     </motion.div>
   );
