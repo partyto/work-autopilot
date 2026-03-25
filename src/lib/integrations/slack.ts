@@ -61,13 +61,23 @@ export async function replyToThread(channelId: string, threadTs: string, text: s
   });
 }
 
-// 메시지에 이모지 반응 추가
+// 메시지에 이모지 반응 추가 (User Token 우선 — reactions:write 스코프 필요)
 export async function addReaction(channelId: string, messageTs: string, emoji: string) {
-  return slackApi("reactions.add", {
-    channel: channelId,
-    timestamp: messageTs,
-    name: emoji,
+  const token = SLACK_USER_TOKEN || SLACK_TOKEN;
+  if (!token) throw new Error("Slack token not configured");
+
+  await throttle();
+  const res = await fetch("https://slack.com/api/reactions.add", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ channel: channelId, timestamp: messageTs, name: emoji }),
   });
+  const data = await res.json();
+  if (!data.ok) throw new Error(`Slack API error: ${data.error}`);
+  return data;
 }
 
 // 최근 멘션 검색 (User Token 필요 — search:read scope)
