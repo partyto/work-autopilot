@@ -325,8 +325,18 @@ async function scanSlackMentions(): Promise<{
     const threadTs = mention.ts;
     const channelId = mention.channel?.id;
 
-    // 요약 미리보기
+    // 이모지 전용 메시지 제외 (:emoji_name: 또는 유니코드 이모지만 있는 경우)
+    const strippedForEmojiCheck = text
+      .replace(/<[^>]+>/g, "")
+      .replace(/:[a-z0-9_+\-]+:/g, "")
+      .replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27FF}]|[\u{FE00}-\u{FEFF}]/gu, "")
+      .replace(/\s/g, "");
+    if (strippedForEmojiCheck.length === 0) continue;
+
+    // 요약 미리보기 — <@ID|name> → @name, <@ID> → @나(userId) 또는 @user
     const preview = text
+      .replace(/<@[A-Z0-9]+\|([^>]+)>/g, "@$1")
+      .replace(new RegExp(`<@${userId}>`, "g"), `@나`)
       .replace(/<@[A-Z0-9]+>/g, "@user")
       .replace(/<[^>]+>/g, "")
       .replace(/\n+/g, " ")
