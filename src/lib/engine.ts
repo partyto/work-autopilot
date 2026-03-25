@@ -87,11 +87,14 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
       report.push(`*📋 Work Autopilot — 일일 업무 리포트*`);
       report.push(`\`${todayDate()}\`\n`);
 
+      const jiraBase = process.env.JIRA_SITE_URL || "https://catchtable.atlassian.net";
+      const jiraLink = (key: string) => `<${jiraBase}/browse/${key}|${key}>`;
+
       report.push(`*🔄 진행 중 (${inProgress.length}건)*`);
       if (inProgress.length > 0) {
         inProgress.forEach((i) => {
           const due = i.fields.duedate ? ` (기한: ${i.fields.duedate})` : "";
-          report.push(`• \`${i.key}\` ${i.fields.summary}${due}`);
+          report.push(`• ${jiraLink(i.key)} ${i.fields.summary}${due}`);
         });
       } else {
         report.push("• 없음");
@@ -99,7 +102,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
 
       report.push(`\n*📦 백로그 (${backlog.length}건)*`);
       if (backlog.length > 0) {
-        report.push(`• ${backlog.slice(0, 3).map((i) => `\`${i.key}\` ${i.fields.summary}`).join("\n• ")}`);
+        report.push(`• ${backlog.slice(0, 3).map((i) => `${jiraLink(i.key)} ${i.fields.summary}`).join("\n• ")}`);
         if (backlog.length > 3) report.push(`• ...외 ${backlog.length - 3}건`);
       }
 
@@ -107,10 +110,10 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
       if (overdue.length > 0 || dueSoon.length > 0) {
         report.push(`\n*⚠️ 주의 필요*`);
         overdue.forEach((i) => {
-          warnings.push(`❗ \`${i.key}\` ${i.fields.summary} — 기한 초과 (${i.fields.duedate})`);
+          warnings.push(`❗ ${jiraLink(i.key)} ${i.fields.summary} — 기한 초과 (${i.fields.duedate})`);
         });
         dueSoon.forEach((i) => {
-          warnings.push(`⏰ \`${i.key}\` ${i.fields.summary} — 기한 임박 (${i.fields.duedate})`);
+          warnings.push(`⏰ ${jiraLink(i.key)} ${i.fields.summary} — 기한 임박 (${i.fields.duedate})`);
         });
         report.push(warnings.join("\n"));
       }
@@ -118,7 +121,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
       report.push(`\n*✅ 최근 7일 완료 (${doneIssues.length}건)*`);
       if (doneIssues.length > 0) {
         doneIssues.slice(0, 5).forEach((i) => {
-          report.push(`• \`${i.key}\` ${i.fields.summary}`);
+          report.push(`• ${jiraLink(i.key)} ${i.fields.summary}`);
         });
         if (doneIssues.length > 5) report.push(`• ...외 ${doneIssues.length - 5}건`);
       }
@@ -181,7 +184,8 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
       if (slackResults.mentions > 0) {
         report.push(`\n*💬 Slack 멘션 (${slackResults.mentions}건)*`);
         slackResults.items.forEach((item) => {
-          report.push(`• #${item.channel} — ${item.preview}`);
+          const threadLink = item.permalink ? `<${item.permalink}|#${item.channel}>` : `#${item.channel}`;
+          report.push(`• ${threadLink} — ${item.preview}`);
           scanItems.push({
             type: "slack",
             channel: item.channel,

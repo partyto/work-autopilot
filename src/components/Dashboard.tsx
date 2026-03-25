@@ -360,7 +360,7 @@ export default function Dashboard() {
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--surface2)] transition-colors group"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--surface2)] transition-colors group overflow-hidden"
                 >
                   {item.type === "jira" ? (
                     <>
