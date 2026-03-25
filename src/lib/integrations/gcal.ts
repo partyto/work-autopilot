@@ -98,7 +98,7 @@ export async function createEvent(
       },
       body: JSON.stringify({
         summary:     `📋 ${title}`,
-        description: description || "Work Autopilot에서 자동 생성",
+        description: description || "Work Pavlotrasche에서 자동 생성",
         start: { date },
         end:   { date },
         reminders: {

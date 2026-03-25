@@ -41,11 +41,12 @@ interface TaskCardProps {
   onUpdate: () => void;
 }
 
-const STATUSES = ["pending", "in_progress", "done", "cancelled"] as const;
+const STATUSES = ["pending", "in_progress", "in_qa", "done", "cancelled"] as const;
 
 const STATUS_DOT: Record<string, string> = {
   pending: "bg-slate-400",
   in_progress: "bg-blue-500",
+  in_qa: "bg-violet-500",
   done: "bg-emerald-500",
   cancelled: "bg-gray-400",
 };
@@ -148,7 +149,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
             </div>
 
             {/* 메타 정보 */}
-            <div className="flex items-center gap-3 ml-5 mt-1">
+            <div className="flex items-center gap-3 ml-5 mt-1 flex-wrap">
               {isDue && (
                 <span className="flex items-center gap-1 text-[11px] text-red-500 font-medium">
                   <AlertCircle size={10} />
@@ -159,7 +160,15 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                 <span className="text-[11px] text-amber-500">⏰ {task.dueDate}</span>
               )}
               {!isDue && !isDueSoon && task.dueDate && (
-                <span className="text-[11px] text-slate-400">{task.dueDate}</span>
+                <span className="text-[11px] text-slate-400">마감 {task.dueDate}</span>
+              )}
+              <span className="text-[11px] text-slate-400">
+                생성 {task.createdAt.slice(0, 10)}
+              </span>
+              {task.completedAt && (
+                <span className="text-[11px] text-emerald-600">
+                  완료 {task.completedAt.slice(0, 10)}
+                </span>
               )}
               {hasNoLinks && (
                 <span className="flex items-center gap-1 text-[11px] text-slate-400">

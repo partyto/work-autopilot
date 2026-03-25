@@ -50,6 +50,15 @@ export async function replyToThread(channelId: string, threadTs: string, text: s
   });
 }
 
+// 메시지에 이모지 반응 추가
+export async function addReaction(channelId: string, messageTs: string, emoji: string) {
+  return slackApi("reactions.add", {
+    channel: channelId,
+    timestamp: messageTs,
+    name: emoji,
+  });
+}
+
 // 최근 멘션 검색 (User Token 필요 — search:read scope)
 export async function searchMentions(query: string, count = 20) {
   const token = SLACK_USER_TOKEN || SLACK_TOKEN;

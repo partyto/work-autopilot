@@ -19,6 +19,7 @@ export function cn(...classes: (string | undefined | false)[]) {
 export const STATUS_LABELS: Record<string, string> = {
   pending: "대기",
   in_progress: "진행 중",
+  in_qa: "IN-QA",
   done: "완료",
   cancelled: "취소",
   overdue: "기한 초과",
@@ -27,6 +28,7 @@ export const STATUS_LABELS: Record<string, string> = {
 export const STATUS_COLORS: Record<string, string> = {
   pending: "bg-slate-500",
   in_progress: "bg-blue-500",
+  in_qa: "bg-violet-500",
   done: "bg-emerald-500",
   cancelled: "bg-gray-500",
   overdue: "bg-red-500",

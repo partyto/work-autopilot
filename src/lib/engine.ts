@@ -84,7 +84,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
       });
 
       // 리포트 구성
-      report.push(`*📋 Work Autopilot — 일일 업무 리포트*`);
+      report.push(`*📋 Work Pavlotrasche — 일일 업무 리포트*`);
       report.push(`\`${todayDate()}\`\n`);
 
       const jiraBase = process.env.JIRA_SITE_URL || "https://catchtable.atlassian.net";
@@ -225,7 +225,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
     report.push(`${warnings.length > 0 ? "2" : "1"}. 대시보드에서 대기 중인 액션 승인/거절`);
   }
 
-  report.push(`\n_🤖 Work Autopilot 자동 리포트_`);
+  report.push(`\n_🤖 Work Pavlotrasche 자동 리포트_`);
 
   // --- Step 4: Slack DM 발송 (sendReport=true인 경우만) ---
   const message = report.join("\n");
@@ -591,6 +591,12 @@ export async function executeApprovedActions() {
           if (!slack.isSlackConfigured()) throw new Error("Slack API 미설정");
           const { channelId, threadTs, message } = payload;
           await slack.replyToThread(channelId, threadTs, message);
+          // 원본 메시지에 이모지 반응 추가 (실패해도 액션은 성공 처리)
+          try {
+            await slack.addReaction(channelId, threadTs, "white_check_mark");
+          } catch {
+            // reactions:write scope 없을 수 있음 — 무시
+          }
 
           await db.update(schema.actions).set({
             status: "executed",
