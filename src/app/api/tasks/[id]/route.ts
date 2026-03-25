@@ -112,6 +112,21 @@ export async function PATCH(
       }
     }
 
+    // 기한 변경 시 Jira 기한 동기화
+    if (body.dueDate !== undefined && jira.isJiraConfigured()) {
+      const jiraLink = links.find((l) => l.linkType === "jira");
+      if (jiraLink?.jiraIssueKey) {
+        try {
+          await jira.updateIssue(jiraLink.jiraIssueKey, {
+            duedate: body.dueDate || null,
+          });
+          console.log(`[Task PATCH] Jira ${jiraLink.jiraIssueKey} 기한 → ${body.dueDate || "없음"}`);
+        } catch (e) {
+          console.error(`[Task PATCH] Jira due date sync failed for ${jiraLink.jiraIssueKey}:`, e);
+        }
+      }
+    }
+
     return NextResponse.json({ ...updated, links });
   } catch (error) {
     console.error("Failed to update task:", error);

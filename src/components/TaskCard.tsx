@@ -91,6 +91,16 @@ const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
   },
 };
 
+function formatDateTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
 export default function TaskCard({ task, onUpdate }: TaskCardProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -325,9 +335,9 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                 </button>
               )}
 
-              <span className="text-[11px] text-slate-400">생성 {task.createdAt.slice(0, 10)}</span>
+              <span className="text-[11px] text-slate-400">생성 {formatDateTime(task.createdAt)}</span>
               {task.completedAt && (
-                <span className="text-[11px] text-emerald-600">완료 {task.completedAt.slice(0, 10)}</span>
+                <span className="text-[11px] text-emerald-600">완료 {formatDateTime(task.completedAt)}</span>
               )}
               {hasNoLinks && (
                 <span className="flex items-center gap-1 text-[11px] text-slate-400">

@@ -445,6 +445,9 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
       const issueUrl = `${jiraBase}/browse/${issue.key}`;
       const placeholderTaskId = generateId();
 
+      // Jira 이슈 생성일 사용
+      const jiraCreated = issue.fields.created ? new Date(issue.fields.created).toISOString() : now;
+
       await db.insert(schema.tasks).values({
         id: placeholderTaskId,
         title: `${issue.fields.summary}`,
@@ -453,7 +456,7 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
         status: "pending",
         priority: "medium",
         dueDate: issue.fields.duedate || null,
-        createdAt: now,
+        createdAt: jiraCreated,
         updatedAt: now,
       });
 
@@ -505,6 +508,15 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
       where: eq(schema.tasks.id, link.taskId),
     });
     if (!task) continue;
+
+    // Jira 기한 → 카드 기한 동기화
+    const jiraDue = issue.fields.duedate || null;
+    if (jiraDue !== task.dueDate) {
+      await db.update(schema.tasks)
+        .set({ dueDate: jiraDue, updatedAt: now })
+        .where(eq(schema.tasks.id, task.id));
+      console.log(`[Engine] Jira ${issue.key} 기한 동기화: ${task.dueDate} → ${jiraDue}`);
+    }
 
     // 양방향 매핑으로 불일치 감지
     const expectedTodo = jiraStatusToTodo(jiraStatus);
@@ -739,12 +751,13 @@ export async function executeApprovedActions() {
     }
   }
 
-  // 결과 Slack DM 발송
-  if (slack.isSlackConfigured() && (executed > 0 || failed > 0)) {
+  // 결과 Slack DM 발송 — 실패가 있을 때만 알림
+  if (slack.isSlackConfigured() && failed > 0) {
+    const failResults = results.filter((r) => r.startsWith("❌"));
     const summary = [
       `*🤖 액션 실행 결과*`,
       `실행: ${executed}건 | 실패: ${failed}건`,
-      ...results,
+      ...failResults,
     ].join("\n");
 
     try {

@@ -38,7 +38,7 @@ async function jiraFetch(path: string, options: RequestInit = {}) {
 // JQL로 이슈 검색
 export async function searchIssues(jql: string, maxResults = 50) {
   const data = await jiraFetch(
-    `/search/jql?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}&fields=summary,status,priority,duedate,updated,assignee`
+    `/search/jql?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}&fields=summary,status,priority,duedate,updated,created,assignee`
   );
   return data.issues as JiraIssue[];
 }
@@ -112,6 +112,14 @@ export async function getCreateMetaFields(projectKey: string, issueTypeId: strin
   return (data.fields || []) as JiraCreateField[];
 }
 
+// 이슈 필드 업데이트 (기한 등)
+export async function updateIssue(issueKey: string, fields: Record<string, any>) {
+  await jiraFetch(`/issue/${issueKey}`, {
+    method: "PUT",
+    body: JSON.stringify({ fields }),
+  });
+}
+
 // 이슈 생성
 export async function createIssue(fields: Record<string, any>): Promise<{ key: string; id: string; self: string }> {
   return jiraFetch("/issue", {
@@ -134,6 +142,7 @@ export interface JiraIssue {
     priority: { name: string };
     duedate: string | null;
     updated: string;
+    created?: string;
   };
 }
 
