@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, desc, and, asc } from "drizzle-orm";
+import { eq, desc, and, asc, notInArray } from "drizzle-orm";
 import { generateId, nowLocal } from "@/lib/utils";
 import type { Task } from "@/db/schema";
 import * as jira from "@/lib/integrations/jira";
@@ -13,9 +13,22 @@ export async function GET(request: NextRequest) {
   const includeLinks = searchParams.get("includeLinks") !== "false";
 
   try {
+    // 승인 대기 중인 todo_create 액션의 placeholder task는 제외 (아직 사용자가 승인 안 함)
+    const proposalActions = await db.query.actions.findMany({
+      where: and(
+        eq(schema.actions.actionType, "todo_create" as any),
+        eq(schema.actions.status, "proposed")
+      ),
+      columns: { taskId: true },
+    });
+    const placeholderIds = proposalActions.map((a) => a.taskId);
+
     let conditions = [];
     if (status && status !== "all") {
       conditions.push(eq(schema.tasks.status, status as any));
+    }
+    if (placeholderIds.length > 0) {
+      conditions.push(notInArray(schema.tasks.id, placeholderIds));
     }
 
     const taskList = await db.query.tasks.findMany({

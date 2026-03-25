@@ -46,6 +46,17 @@ export async function PATCH(
       }
     }
 
+    // 거절 시: todo_create placeholder task 삭제
+    if (body.status === "rejected") {
+      const action = await db.query.actions.findFirst({
+        where: eq(schema.actions.id, id),
+        columns: { actionType: true, taskId: true },
+      });
+      if (action?.actionType === "todo_create") {
+        await db.delete(schema.tasks).where(eq(schema.tasks.id, action.taskId));
+      }
+    }
+
     const updated = await db.query.actions.findFirst({
       where: eq(schema.actions.id, id),
     });

@@ -610,27 +610,31 @@ export async function executeApprovedActions() {
 
         case "todo_create": {
           const { summary, channelId, threadTs, threadUrl } = payload;
-          const newTaskId = generateId();
-          await db.insert(schema.tasks).values({
-            id: newTaskId,
+          // placeholder task(action.taskId)를 실제 TO-DO로 활성화 (새 task 생성 안 함)
+          await db.update(schema.tasks).set({
             title: summary || "Slack에서 감지된 할일",
-            sourceType: "slack_detected",
-            status: "pending",
-            priority: "medium",
-            createdAt: now,
             updatedAt: now,
-          });
+          }).where(eq(schema.tasks.id, action.taskId));
 
+          // Slack link가 없으면 추가
           if (channelId && threadTs) {
-            await db.insert(schema.taskLinks).values({
-              id: generateId(),
-              taskId: newTaskId,
-              linkType: "slack_thread",
-              slackChannelId: channelId,
-              slackThreadTs: threadTs,
-              slackThreadUrl: threadUrl || null,
-              createdAt: now,
+            const existingLink = await db.query.taskLinks.findFirst({
+              where: and(
+                eq(schema.taskLinks.taskId, action.taskId),
+                eq(schema.taskLinks.linkType, "slack_thread")
+              ),
             });
+            if (!existingLink) {
+              await db.insert(schema.taskLinks).values({
+                id: generateId(),
+                taskId: action.taskId,
+                linkType: "slack_thread",
+                slackChannelId: channelId,
+                slackThreadTs: threadTs,
+                slackThreadUrl: threadUrl || null,
+                createdAt: now,
+              });
+            }
           }
 
           await db.update(schema.actions).set({
@@ -638,7 +642,7 @@ export async function executeApprovedActions() {
             executedAt: now,
           }).where(eq(schema.actions.id, action.id));
 
-          results.push(`✅ 새 TO-DO 생성: ${summary}`);
+          results.push(`✅ TO-DO 생성: ${summary}`);
           executed++;
           break;
         }
