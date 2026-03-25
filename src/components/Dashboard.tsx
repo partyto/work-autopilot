@@ -251,7 +251,7 @@ export default function Dashboard() {
 
   const KPI_FILTERS: Record<string, (t: TaskWithLinks) => boolean> = {
     pending: (t) => t.status === "pending",
-    in_progress: (t) => t.status === "in_progress",
+    in_progress: (t) => t.status === "in_progress" || t.status === "in_qa",
     done: (t) => t.status === "done",
     overdue: (t) => !!t.dueDate && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date(),
     noLink: (t) => !t.links || t.links.length === 0,
@@ -290,7 +290,7 @@ export default function Dashboard() {
   const stats = {
     total: tasks.length,
     pending: tasks.filter((t) => t.status === "pending").length,
-    inProgress: tasks.filter((t) => t.status === "in_progress").length,
+    inProgress: tasks.filter((t) => t.status === "in_progress" || t.status === "in_qa").length,
     done: tasks.filter((t) => t.status === "done").length,
     overdue: tasks.filter(
       (t) => t.dueDate && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date()
