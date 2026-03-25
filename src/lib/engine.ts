@@ -7,28 +7,38 @@ import * as slack from "@/lib/integrations/slack";
 import * as gcal from "@/lib/integrations/gcal";
 
 // ===== 상태 매핑 =====
-// Jira → TO-DO 상태 매핑
-const JIRA_TO_TODO: Record<string, string> = {
-  DONE: "done",
-  "IN PROGRESS": "in_progress",
-  BACKLOG: "pending",
-};
-
 // TO-DO → Jira 상태 매핑
 const TODO_TO_JIRA: Record<string, string> = {
   done: "DONE",
   in_progress: "IN PROGRESS",
+  in_qa: "IN QA",
   pending: "BACKLOG",
 };
 
-function jiraStatusToTodo(jiraStatus: string): string | null {
-  // 대소문자 무관 매핑
+// 상태 우선순위 (높을수록 더 앞선 상태)
+const TODO_STATUS_LEVEL: Record<string, number> = {
+  pending: 0,
+  in_progress: 1,
+  in_qa: 2,
+  done: 3,
+  cancelled: -1,
+};
+
+function jiraStatusLevel(jiraStatus: string): number {
   const upper = jiraStatus.toUpperCase();
-  if (upper === "DONE") return "done";
+  if (upper === "DONE" || upper.includes("DONE") || upper.includes("CLOSED")) return 3;
+  if (upper.includes("QA") || upper.includes("REVIEW") || upper.includes("TEST")) return 2;
+  if (upper.includes("PROGRESS")) return 1;
+  if (upper === "BACKLOG" || upper === "TO DO" || upper === "OPEN" || upper === "TODO") return 0;
+  return 0;
+}
+
+function jiraStatusToTodo(jiraStatus: string): string | null {
+  const upper = jiraStatus.toUpperCase();
+  if (upper === "DONE" || upper.includes("DONE") || upper.includes("CLOSED")) return "done";
+  if (upper.includes("QA") || upper.includes("REVIEW") || upper.includes("TEST")) return "in_qa";
   if (upper.includes("PROGRESS")) return "in_progress";
-  if (upper === "BACKLOG" || upper === "TO DO" || upper === "OPEN") return "pending";
-  // IN QA, IN REVIEW 등은 in_progress로 간주
-  if (upper.includes("QA") || upper.includes("REVIEW") || upper.includes("TEST")) return "in_progress";
+  if (upper === "BACKLOG" || upper === "TO DO" || upper === "OPEN" || upper === "TODO") return "pending";
   return null; // 매핑 불가
 }
 
@@ -39,6 +49,7 @@ function todoStatusToJira(todoStatus: string): string | null {
 const TODO_STATUS_LABEL: Record<string, string> = {
   pending: "대기",
   in_progress: "진행 중",
+  in_qa: "IN-QA",
   done: "완료",
 };
 
@@ -497,8 +508,10 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
 
     // 양방향 매핑으로 불일치 감지
     const expectedTodo = jiraStatusToTodo(jiraStatus);
-    const expectedJira = todoStatusToJira(task.status);
-    const isAligned = expectedTodo === task.status;
+    const jiraLevelCheck = jiraStatusLevel(jiraStatus);
+    const todoLevelCheck = TODO_STATUS_LEVEL[task.status] ?? 0;
+    // 레벨이 같으면 aligned (예: Jira IN QA=lv2, TODO in_qa=lv2)
+    const isAligned = expectedTodo === task.status || jiraLevelCheck === todoLevelCheck;
 
     // 기존 proposed 액션 조회
     const existingAction = await db.query.actions.findFirst({
@@ -522,11 +535,18 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
     // 불일치 존재 — 방향 판단: 나중에 바뀐 쪽이 기준
     if (existingAction) continue; // 이미 proposed 액션이 있으면 중복 방지
 
-    if (jiraChanged) {
-      // Jira가 변경됨 → Jira 기준으로 TO-DO 변경 제안
-      if (expectedTodo) {
+    // 우선순위 기반 방향 결정: 더 앞선 상태가 기준
+    const jiraLevel = jiraStatusLevel(jiraStatus);
+    const todoLevel = TODO_STATUS_LEVEL[task.status] ?? 0;
+
+    if (jiraLevel >= todoLevel) {
+      // Jira가 더 앞서거나 동급 → Jira 기준으로 TO-DO 변경 제안
+      if (expectedTodo && expectedTodo !== task.status) {
         const todoLabel = TODO_STATUS_LABEL[expectedTodo] || expectedTodo;
-        const desc = `Jira ${issue.key}가 ${prevJiraStatus} → ${jiraStatus} 변경됨 → TO-DO "${todoLabel}" 전환 제안`;
+        const changeReason = jiraChanged
+          ? `Jira ${issue.key}가 ${prevJiraStatus} → ${jiraStatus} 변경됨`
+          : `Jira ${issue.key}가 ${jiraStatus} 상태`;
+        const desc = `${changeReason} → TO-DO "${todoLabel}" 전환 제안`;
         await db.insert(schema.actions).values({
           id: generateId(),
           taskId: task.id,
@@ -541,10 +561,11 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
           proposedAt: now,
         });
         newActionDescs.push(desc);
-        console.log(`[Engine] Jira 변경 감지: ${issue.key} ${prevJiraStatus}→${jiraStatus} → TO-DO ${todoLabel} 제안`);
+        console.log(`[Engine] Jira 우선: ${issue.key} ${jiraStatus}(lv${jiraLevel}) > TODO ${task.status}(lv${todoLevel}) → TO-DO ${todoLabel} 제안`);
       }
     } else {
-      // Jira 미변경 → TO-DO가 변경된 것 → Jira 변경 제안
+      // TODO가 더 앞섬 → TODO 기준으로 Jira 변경 제안
+      const expectedJira = todoStatusToJira(task.status);
       if (expectedJira) {
         const desc = `TO-DO "${TODO_STATUS_LABEL[task.status] || task.status}"인데 Jira ${issue.key}는 ${jiraStatus} → ${expectedJira} 전환 제안`;
         await db.insert(schema.actions).values({
@@ -560,7 +581,7 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
           proposedAt: now,
         });
         newActionDescs.push(desc);
-        console.log(`[Engine] TO-DO 변경 감지: ${task.status} → Jira ${issue.key} ${expectedJira} 전환 제안`);
+        console.log(`[Engine] TODO 우선: ${task.status}(lv${todoLevel}) > Jira ${jiraStatus}(lv${jiraLevel}) → Jira ${expectedJira} 전환 제안`);
       }
     }
   }
