@@ -312,6 +312,7 @@ export default function Dashboard() {
 
         {/* 액션 버튼 */}
         <div className="flex items-center gap-2">
+          <TaskForm onCreated={handleRefreshAll} />
           <button
             onClick={handleRefreshAll}
             disabled={isScanning}
@@ -418,7 +419,7 @@ export default function Dashboard() {
             transition={{ duration: 0.2 }}
             className="space-y-4"
           >
-            <TaskForm onCreated={handleRefreshAll} />
+            {/* TaskForm moved to top control bar */}
 
             {kpiFilters.size > 0 && (
               <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700 flex-wrap">

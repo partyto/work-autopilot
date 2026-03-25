@@ -217,13 +217,13 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
   if (!isOpen) {
     return (
       <motion.button
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.97 }}
         onClick={() => setIsOpen(true)}
-        className="w-full py-3 px-4 border-2 border-dashed border-[var(--border2)] rounded-xl text-slate-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all cursor-pointer flex items-center justify-center gap-2"
+        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-400 text-emerald-700 rounded-xl transition-all cursor-pointer"
       >
-        <Plus size={15} />
-        <span className="text-sm font-medium">새 할일 추가</span>
+        <Plus size={13} />
+        새 할일
       </motion.button>
     );
   }
