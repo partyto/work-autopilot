@@ -31,7 +31,6 @@ import {
   ListTodo,
   Bot,
   CircleDot,
-  RefreshCw,
   History,
   CalendarDays,
   GripVertical,
@@ -313,14 +312,6 @@ export default function Dashboard() {
         {/* 액션 버튼 */}
         <div className="flex items-center gap-2">
           <TaskForm onCreated={handleRefreshAll} />
-          <button
-            onClick={handleRefreshAll}
-            disabled={isScanning}
-            className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-xl transition-all cursor-pointer"
-            title="새로고침"
-          >
-            <RefreshCw size={15} className={isScanning ? "animate-spin" : ""} />
-          </button>
           <button
             onClick={handleExecuteNow}
             disabled={isScanning || stats.pendingActions === 0}
