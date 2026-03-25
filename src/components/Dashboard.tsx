@@ -122,7 +122,7 @@ export default function Dashboard() {
   const [isScanning, setIsScanning] = useState(false);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [lastScanItems, setLastScanItems] = useState<ScanResultItem[] | null>(null);
-  const [kpiFilter, setKpiFilter] = useState<string | null>(null);
+  const [kpiFilters, setKpiFilters] = useState<Set<string>>(new Set());
 
   // DnD 센서 설정
   const sensors = useSensors(
@@ -270,13 +270,18 @@ export default function Dashboard() {
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
 
-  const baseTasks = kpiFilter
-    ? tasks.filter(KPI_FILTERS[kpiFilter] ?? (() => true))
+  const baseTasks = kpiFilters.size > 0
+    ? tasks.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)))
     : tasks;
   const filteredTasks = sortTasks(baseTasks);
 
   const handleKpiClick = (key: string) => {
-    setKpiFilter((prev) => (prev === key ? null : key));
+    setKpiFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
     setActiveSection("tasks");
   };
   const currentActionFilter = ACTION_FILTER_TABS.find((t) => t.key === activeActionTab) || ACTION_FILTER_TABS[0];
@@ -341,9 +346,9 @@ export default function Dashboard() {
 
       {/* KPI 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending} color="text-slate-600" borderColor="border-slate-200" active={kpiFilter === "pending"} onClick={() => handleKpiClick("pending")} />
-        <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress} color="text-blue-600" borderColor="border-blue-200" active={kpiFilter === "in_progress"} onClick={() => handleKpiClick("in_progress")} />
-        <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done} color="text-emerald-600" borderColor="border-emerald-200" active={kpiFilter === "done"} onClick={() => handleKpiClick("done")} />
+        <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending} color="text-slate-600" borderColor="border-slate-200" active={kpiFilters.has("pending")} onClick={() => handleKpiClick("pending")} />
+        <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress} color="text-blue-600" borderColor="border-blue-200" active={kpiFilters.has("in_progress")} onClick={() => handleKpiClick("in_progress")} />
+        <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done} color="text-emerald-600" borderColor="border-emerald-200" active={kpiFilters.has("done")} onClick={() => handleKpiClick("done")} />
         <KpiCard
           icon={<AlertTriangle size={14} />}
           label="기한 초과"
@@ -351,7 +356,7 @@ export default function Dashboard() {
           color={stats.overdue > 0 ? "text-red-600" : "text-slate-400"}
           borderColor={stats.overdue > 0 ? "border-red-200" : "border-slate-200"}
           alert={stats.overdue > 0}
-          active={kpiFilter === "overdue"}
+          active={kpiFilters.has("overdue")}
           onClick={() => handleKpiClick("overdue")}
         />
         <KpiCard
@@ -360,7 +365,7 @@ export default function Dashboard() {
           value={stats.noLink}
           color={stats.noLink > 0 ? "text-yellow-600" : "text-slate-400"}
           borderColor={stats.noLink > 0 ? "border-yellow-200" : "border-slate-200"}
-          active={kpiFilter === "noLink"}
+          active={kpiFilters.has("noLink")}
           onClick={() => handleKpiClick("noLink")}
         />
         <KpiCard
@@ -370,7 +375,7 @@ export default function Dashboard() {
           color={stats.pendingActions > 0 ? "text-amber-600" : "text-slate-400"}
           borderColor={stats.pendingActions > 0 ? "border-amber-200" : "border-slate-200"}
           alert={stats.pendingActions > 0}
-          onClick={() => { setKpiFilter(null); setActiveSection("actions"); }}
+          onClick={() => { setKpiFilters(new Set()); setActiveSection("actions"); }}
         />
       </div>
 
@@ -415,17 +420,23 @@ export default function Dashboard() {
           >
             <TaskForm onCreated={handleRefreshAll} />
 
-            {kpiFilter && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
-                <span className="font-medium">
-                  {{ pending: "대기", in_progress: "진행 중", done: "완료", overdue: "기한 초과", noLink: "연결 없음" }[kpiFilter]} 항목 필터 중
-                </span>
-                <span className="text-blue-400">({filteredTasks.length}건)</span>
+            {kpiFilters.size > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700 flex-wrap">
+                {Array.from(kpiFilters).map((k) => {
+                  const label = { pending: "대기", in_progress: "진행 중", done: "완료", overdue: "기한 초과", noLink: "연결 없음" }[k];
+                  return (
+                    <span key={k} className="flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded-lg text-xs font-medium">
+                      {label}
+                      <button onClick={() => handleKpiClick(k)} className="hover:text-blue-900"><X size={10} /></button>
+                    </span>
+                  );
+                })}
+                <span className="text-blue-400 text-xs">({filteredTasks.length}건)</span>
                 <button
-                  onClick={() => setKpiFilter(null)}
+                  onClick={() => setKpiFilters(new Set())}
                   className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded-lg transition-all"
                 >
-                  <X size={11} /> 필터 해제
+                  <X size={11} /> 전체 해제
                 </button>
               </div>
             )}
@@ -435,8 +446,8 @@ export default function Dashboard() {
             ) : filteredTasks.length === 0 ? (
               <EmptyState
                 icon={<ListTodo size={32} className="text-slate-300" />}
-                message={kpiFilter ? "해당 조건의 할일이 없습니다" : "할일이 없습니다"}
-                sub={kpiFilter ? undefined : "위의 '+ 새 할일 추가' 버튼으로 시작하세요"}
+                message={kpiFilters.size > 0 ? "해당 조건의 할일이 없습니다" : "할일이 없습니다"}
+                sub={kpiFilters.size > 0 ? undefined : "위의 '+ 새 할일 추가' 버튼으로 시작하세요"}
               />
             ) : (
               <DndContext
