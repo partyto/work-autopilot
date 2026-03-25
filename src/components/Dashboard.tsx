@@ -214,7 +214,10 @@ export default function Dashboard() {
       const data = await res.json();
       if (data.success) {
         toast.success("스캔 완료!", { id: toastId });
-        if (data.scanItems?.length > 0) setLastScanItems(data.scanItems);
+        if (data.scanItems?.length > 0) {
+          setLastScanItems(data.scanItems);
+          setActiveSection("history");
+        }
         handleRefreshAll();
       } else {
         toast.error("스캔 실패: " + (data.error || "알 수 없는 오류"), { id: toastId });
@@ -337,52 +340,6 @@ export default function Dashboard() {
           onClick={() => setActiveSection("actions")}
         />
       </div>
-
-      {/* 스캔 결과 패널 */}
-      <AnimatePresence>
-        {lastScanItems && lastScanItems.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="bg-[var(--surface)] border border-[var(--border2)] rounded-2xl p-4 shadow-[var(--shadow-card)]"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-slate-700">최근 스캔 결과 ({lastScanItems.length}건)</span>
-              <button onClick={() => setLastScanItems(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X size={14} />
-              </button>
-            </div>
-            <div className="space-y-1.5">
-              {lastScanItems.map((item, i) => (
-                <a
-                  key={i}
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--surface2)] transition-colors group overflow-hidden"
-                >
-                  {item.type === "jira" ? (
-                    <>
-                      <span className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
-                      <span className="text-xs font-medium text-blue-600 flex-shrink-0">{item.key}</span>
-                      <span className="text-xs text-slate-600 truncate flex-1">{item.summary}</span>
-                      <span className="text-[10px] text-slate-400 flex-shrink-0">{item.status}</span>
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare size={12} className="text-purple-500 flex-shrink-0" />
-                      <span className="text-xs font-medium text-purple-600 flex-shrink-0">#{item.channel}</span>
-                      <span className="text-xs text-slate-600 truncate flex-1">{item.preview}</span>
-                    </>
-                  )}
-                  <ExternalLink size={10} className="text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
-                </a>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* 섹션 탭 */}
       <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1.5 w-fit shadow-[var(--shadow-card)]">
@@ -522,8 +479,58 @@ export default function Dashboard() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -8 }}
             transition={{ duration: 0.2 }}
-            className="space-y-3"
+            className="space-y-4"
           >
+            {/* 이번 스캔 결과 (임시, 세션 유지) */}
+            <AnimatePresence>
+              {lastScanItems && lastScanItems.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="bg-[var(--surface)] border border-purple-200 rounded-2xl p-4 shadow-[var(--shadow-card)]"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-soft-pulse" />
+                      <span className="text-sm font-semibold text-slate-700">이번 스캔 결과 <span className="text-purple-600">({lastScanItems.length}건)</span></span>
+                    </div>
+                    <button onClick={() => setLastScanItems(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg hover:bg-slate-100">
+                      <X size={13} />
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {lastScanItems.map((item, i) => (
+                      <a
+                        key={i}
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--surface2)] transition-colors group overflow-hidden"
+                      >
+                        {item.type === "jira" ? (
+                          <>
+                            <span className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
+                            <span className="text-xs font-medium text-blue-600 flex-shrink-0">{item.key}</span>
+                            <span className="text-xs text-slate-600 truncate flex-1">{item.summary}</span>
+                            <span className="text-[10px] text-slate-400 flex-shrink-0">{item.status}</span>
+                          </>
+                        ) : (
+                          <>
+                            <MessageSquare size={12} className="text-purple-500 flex-shrink-0" />
+                            <span className="text-xs font-medium text-purple-600 flex-shrink-0">#{item.channel}</span>
+                            <span className="text-xs text-slate-600 truncate flex-1">{item.preview}</span>
+                          </>
+                        )}
+                        <ExternalLink size={10} className="text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* 날짜별 이력 */}
             {reports.length === 0 ? (
               <EmptyState
                 icon={<History size={32} className="text-slate-300" />}
