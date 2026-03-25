@@ -99,6 +99,12 @@ const ACTION_FILTER_TABS = [
   { key: "executed", label: "실행됨", filter: (a: ActionWithTask) => a.status === "executed" || a.status === "cancelled" || a.status === "rejected" },
 ] as const;
 
+const SOURCE_FILTERS = [
+  { key: "jira_sync", label: "JIRA", color: "text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100", activeColor: "bg-blue-600 text-white border-blue-600" },
+  { key: "slack_detected", label: "SLACK", color: "text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100", activeColor: "bg-purple-600 text-white border-purple-600" },
+  { key: "manual", label: "SELF", color: "text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100", activeColor: "bg-emerald-600 text-white border-emerald-600" },
+] as const;
+
 // 모듈 스코프 상수 (렌더링마다 재생성 방지)
 const KPI_FILTERS: Record<string, (t: TaskWithLinks) => boolean> = {
   pending: (t) => t.status === "pending",
@@ -144,6 +150,7 @@ export default function Dashboard() {
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [lastScanItems, setLastScanItems] = useState<ScanResultItem[] | null>(null);
   const [kpiFilters, setKpiFilters] = useState<Set<string>>(new Set());
+  const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set());
 
   // DnD 센서 설정
   const sensors = useSensors(
@@ -275,11 +282,14 @@ export default function Dashboard() {
   };
 
   const filteredTasks = useMemo(() => {
-    const base = kpiFilters.size > 0
+    let base = kpiFilters.size > 0
       ? tasks.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)))
       : tasks;
+    if (sourceFilters.size > 0) {
+      base = base.filter((t) => sourceFilters.has(t.sourceType));
+    }
     return sortTasks(base);
-  }, [tasks, kpiFilters]);
+  }, [tasks, kpiFilters, sourceFilters]);
 
   const handleKpiClick = (key: string) => {
     setKpiFilters((prev) => {
@@ -420,6 +430,36 @@ export default function Dashboard() {
             className="space-y-4"
           >
             {/* TaskForm moved to top control bar */}
+
+            {/* 출처 필터 (2차 필터) */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-slate-400 font-medium">출처</span>
+              {SOURCE_FILTERS.map((sf) => {
+                const isActive = sourceFilters.has(sf.key);
+                return (
+                  <button
+                    key={sf.key}
+                    onClick={() => setSourceFilters((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(sf.key)) next.delete(sf.key);
+                      else next.add(sf.key);
+                      return next;
+                    })}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${isActive ? sf.activeColor : sf.color}`}
+                  >
+                    {sf.label}
+                  </button>
+                );
+              })}
+              {sourceFilters.size > 0 && (
+                <button
+                  onClick={() => setSourceFilters(new Set())}
+                  className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X size={11} /> 해제
+                </button>
+              )}
+            </div>
 
             {kpiFilters.size > 0 && (
               <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700 flex-wrap">
