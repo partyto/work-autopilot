@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -99,6 +99,28 @@ const ACTION_FILTER_TABS = [
   { key: "executed", label: "실행됨", filter: (a: ActionWithTask) => a.status === "executed" || a.status === "cancelled" || a.status === "rejected" },
 ] as const;
 
+// 모듈 스코프 상수 (렌더링마다 재생성 방지)
+const KPI_FILTERS: Record<string, (t: TaskWithLinks) => boolean> = {
+  pending: (t) => t.status === "pending",
+  in_progress: (t) => t.status === "in_progress" || t.status === "in_qa",
+  done: (t) => t.status === "done",
+  overdue: (t) => !!t.dueDate && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date(),
+  noLink: (t) => !t.links || t.links.length === 0,
+};
+
+const PRIORITY_LEVEL: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+const sortTasks = (list: TaskWithLinks[]) =>
+  [...list].sort((a, b) => {
+    const pa = PRIORITY_LEVEL[a.priority] ?? 2;
+    const pb = PRIORITY_LEVEL[b.priority] ?? 2;
+    if (pa !== pb) return pa - pb;
+    const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+    const dbTime = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+    if (da !== dbTime) return da - dbTime;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
 const containerVariants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.05 } },
@@ -153,28 +175,31 @@ export default function Dashboard() {
     try {
       const res = await fetch("/api/scan");
       if (res.ok) setScanStatus(await res.json());
-    } catch {}
+    } catch (err) {
+      console.warn("[Dashboard] Scan status fetch failed:", err);
+    }
   }, []);
 
   const fetchReports = useCallback(async () => {
     try {
       const res = await fetch("/api/reports?limit=10");
       if (res.ok) setReports(await res.json());
-    } catch {}
+    } catch (err) {
+      console.warn("[Dashboard] Reports fetch failed:", err);
+    }
   }, []);
 
   useEffect(() => {
-    fetchTasks();
-    fetchActions();
-    fetchScanStatus();
-    fetchReports();
+    Promise.all([fetchTasks(), fetchActions(), fetchScanStatus(), fetchReports()]);
   }, [fetchTasks, fetchActions, fetchScanStatus, fetchReports]);
 
   const handleRefreshAll = useCallback(() => {
-    fetchTasks();
-    fetchActions();
-    fetchReports();
+    Promise.all([fetchTasks(), fetchActions(), fetchReports()]);
   }, [fetchTasks, fetchActions, fetchReports]);
+
+  // DnD stale closure 방지: ref로 최신 tasks 참조
+  const tasksRef = useRef(tasks);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
 
   // 드래그 완료 핸들러
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
@@ -182,7 +207,8 @@ export default function Dashboard() {
     if (!over || active.id === over.id) return;
 
     const currentFilter = FILTER_TABS.find((t) => t.key === activeTab) || FILTER_TABS[0];
-    const visibleTasks = tasks.filter(currentFilter.filter);
+    const currentTasks = tasksRef.current;
+    const visibleTasks = currentTasks.filter(currentFilter.filter);
 
     const oldIndex = visibleTasks.findIndex((t) => t.id === active.id);
     const newIndex = visibleTasks.findIndex((t) => t.id === over.id);
@@ -191,7 +217,7 @@ export default function Dashboard() {
     const reordered = arrayMove(visibleTasks, oldIndex, newIndex);
 
     const visibleIds = new Set(visibleTasks.map((t) => t.id));
-    const nonVisible = tasks.filter((t) => !visibleIds.has(t.id));
+    const nonVisible = currentTasks.filter((t) => !visibleIds.has(t.id));
     setTasks([...reordered, ...nonVisible]);
 
     try {
@@ -204,7 +230,7 @@ export default function Dashboard() {
       toast.error("순서 저장 실패");
       fetchTasks();
     }
-  }, [tasks, activeTab, fetchTasks]);
+  }, [activeTab, fetchTasks]);
 
   const handleScanNow = async () => {
     setIsScanning(true);
@@ -248,31 +274,12 @@ export default function Dashboard() {
     }
   };
 
-  const KPI_FILTERS: Record<string, (t: TaskWithLinks) => boolean> = {
-    pending: (t) => t.status === "pending",
-    in_progress: (t) => t.status === "in_progress" || t.status === "in_qa",
-    done: (t) => t.status === "done",
-    overdue: (t) => !!t.dueDate && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date(),
-    noLink: (t) => !t.links || t.links.length === 0,
-  };
-
-  const PRIORITY_LEVEL: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
-  const sortTasks = (list: TaskWithLinks[]) =>
-    [...list].sort((a, b) => {
-      const pa = PRIORITY_LEVEL[a.priority] ?? 2;
-      const pb = PRIORITY_LEVEL[b.priority] ?? 2;
-      if (pa !== pb) return pa - pb;
-      const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-      const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-      if (da !== db) return da - db;
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
-
-  const baseTasks = kpiFilters.size > 0
-    ? tasks.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)))
-    : tasks;
-  const filteredTasks = sortTasks(baseTasks);
+  const filteredTasks = useMemo(() => {
+    const base = kpiFilters.size > 0
+      ? tasks.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)))
+      : tasks;
+    return sortTasks(base);
+  }, [tasks, kpiFilters]);
 
   const handleKpiClick = (key: string) => {
     setKpiFilters((prev) => {
@@ -283,10 +290,12 @@ export default function Dashboard() {
     });
     setActiveSection("tasks");
   };
-  const currentActionFilter = ACTION_FILTER_TABS.find((t) => t.key === activeActionTab) || ACTION_FILTER_TABS[0];
-  const filteredActions = actions.filter(currentActionFilter.filter);
+  const filteredActions = useMemo(() => {
+    const tab = ACTION_FILTER_TABS.find((t) => t.key === activeActionTab) || ACTION_FILTER_TABS[0];
+    return actions.filter(tab.filter);
+  }, [actions, activeActionTab]);
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: tasks.length,
     pending: tasks.filter((t) => t.status === "pending").length,
     inProgress: tasks.filter((t) => t.status === "in_progress" || t.status === "in_qa").length,
@@ -296,7 +305,7 @@ export default function Dashboard() {
     ).length,
     noLink: tasks.filter((t) => !t.links || t.links.length === 0).length,
     pendingActions: actions.filter((a) => a.status === "proposed").length,
-  };
+  }), [tasks, actions]);
 
   return (
     <div className="space-y-7">

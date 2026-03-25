@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, desc, and, asc, notInArray } from "drizzle-orm";
+import { eq, desc, and, asc, notInArray, inArray } from "drizzle-orm";
 import { generateId, nowLocal } from "@/lib/utils";
-import type { Task } from "@/db/schema";
+import type { Task, TaskLink } from "@/db/schema";
+import type { ActionType, ActionStatus, TaskStatus, LinkType } from "@/db/types";
 import * as jira from "@/lib/integrations/jira";
 import * as gcal from "@/lib/integrations/gcal";
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     // 승인 대기 중인 todo_create 액션의 placeholder task는 제외 (아직 사용자가 승인 안 함)
     const proposalActions = await db.query.actions.findMany({
       where: and(
-        eq(schema.actions.actionType, "todo_create" as any),
+        eq(schema.actions.actionType, "todo_create" as ActionType),
         eq(schema.actions.status, "proposed")
       ),
       columns: { taskId: true },
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     let conditions = [];
     if (status && status !== "all") {
-      conditions.push(eq(schema.tasks.status, status as any));
+      conditions.push(eq(schema.tasks.status, status as TaskStatus));
     }
     if (placeholderIds.length > 0) {
       conditions.push(notInArray(schema.tasks.id, placeholderIds));
@@ -36,16 +37,22 @@ export async function GET(request: NextRequest) {
       orderBy: [asc(schema.tasks.sortOrder), desc(schema.tasks.createdAt)],
     });
 
-    // 매핑 정보도 함께 조회
-    if (includeLinks) {
-      const tasksWithLinks = await Promise.all(
-        taskList.map(async (task: Task) => {
-          const links = await db.query.taskLinks.findMany({
-            where: eq(schema.taskLinks.taskId, task.id),
-          });
-          return { ...task, links };
-        })
-      );
+    // 매핑 정보도 함께 조회 (N+1 방지: 한 번에 전체 조회 후 그룹핑)
+    if (includeLinks && taskList.length > 0) {
+      const taskIds = taskList.map((t: Task) => t.id);
+      const allLinks = await db.query.taskLinks.findMany({
+        where: inArray(schema.taskLinks.taskId, taskIds),
+      });
+      const linksByTask = new Map<string, TaskLink[]>();
+      for (const link of allLinks) {
+        const arr = linksByTask.get(link.taskId) || [];
+        arr.push(link);
+        linksByTask.set(link.taskId, arr);
+      }
+      const tasksWithLinks = taskList.map((task: Task) => ({
+        ...task,
+        links: linksByTask.get(task.id) || [],
+      }));
       return NextResponse.json(tasksWithLinks);
     }
 
@@ -148,7 +155,7 @@ export async function POST(request: NextRequest) {
         await db.insert(schema.taskLinks).values({
           id:             generateId(),
           taskId,
-          linkType:       "gcal" as any,
+          linkType:       "gcal" as LinkType,
           gcalEventId,
           gcalCalendarId: gcal.GCAL_CALENDAR_ID,
           createdAt:      now,

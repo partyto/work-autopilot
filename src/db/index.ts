@@ -70,6 +70,15 @@ const migrationSQL = [
   "ALTER TABLE task_links ADD COLUMN gcal_calendar_id TEXT",
   // sortOrder 추가 (드래그&드롭 정렬용)
   "ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0",
+  // 인덱스 추가 (쿼리 성능 최적화)
+  "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+  "CREATE INDEX IF NOT EXISTS idx_task_links_task_id ON task_links(task_id)",
+  "CREATE INDEX IF NOT EXISTS idx_task_links_type_jira ON task_links(link_type, jira_issue_key)",
+  "CREATE INDEX IF NOT EXISTS idx_task_links_type_slack ON task_links(link_type, slack_thread_ts)",
+  "CREATE INDEX IF NOT EXISTS idx_task_links_type_gcal ON task_links(link_type, gcal_event_id)",
+  "CREATE INDEX IF NOT EXISTS idx_actions_status ON actions(status)",
+  "CREATE INDEX IF NOT EXISTS idx_actions_task_id ON actions(task_id)",
+  "CREATE INDEX IF NOT EXISTS idx_actions_action_type ON actions(action_type)",
 ];
 (async () => {
   for (const sql of migrationSQL) {

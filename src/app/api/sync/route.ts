@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { nowLocal, todayDate, generateId } from "@/lib/utils";
 
 // POST /api/sync - 동기화 상태 업데이트 (Scheduled Task에서 호출)
@@ -119,12 +119,23 @@ async function handleSlackCommitment(body: {
 
   // confidence가 0.6 이상이면 → 새 TO-DO 생성 액션 제안
   if (confidence >= 0.6) {
-    // 임시 TO-DO를 만들지 않고, 액션으로만 제안
-    // 실행 시 TO-DO가 생성됨
+    // placeholder task 생성 (FK 제약 충족)
+    const placeholderTaskId = generateId();
+    await db.insert(schema.tasks).values({
+      id: placeholderTaskId,
+      title: `[Slack] ${summary}`,
+      description: `Slack #${channelName || "DM"}에서 감지된 커밋먼트`,
+      sourceType: "slack_detected",
+      status: "pending",
+      priority: "medium",
+      createdAt: now,
+      updatedAt: now,
+    });
+
     const actionId = generateId();
     await db.insert(schema.actions).values({
       id: actionId,
-      taskId: "SYSTEM", // 아직 TO-DO가 없으므로 시스템 레벨
+      taskId: placeholderTaskId,
       actionType: "todo_create",
       description: `Slack에서 미처리 커밋먼트 감지: ${summary}`,
       payload: JSON.stringify({ channelId, channelName, threadTs, threadUrl, summary, confidence }),

@@ -3,14 +3,8 @@ import { db, schema } from "@/db";
 import { eq, and } from "drizzle-orm";
 import { nowLocal } from "@/lib/utils";
 import * as jira from "@/lib/integrations/jira";
-
-// TO-DO 상태 → Jira 전환 이름 매핑
-const TODO_TO_JIRA_STATUS: Record<string, string> = {
-  done: "Done",
-  in_progress: "In Progress",
-  pending: "Backlog",
-  in_qa: "In QA",
-};
+import { TODO_TO_JIRA } from "@/lib/status-mapping";
+import { isValidTaskStatus, isValidPriority } from "@/db/types";
 
 // GET /api/tasks/[id] - 단일 할일 조회
 export async function GET(
@@ -51,10 +45,14 @@ export async function PATCH(
     const now = nowLocal();
 
     const updateData: Record<string, any> = { updatedAt: now };
+    let _warnings: string[] | undefined;
 
     if (body.title !== undefined) updateData.title = body.title.trim();
     if (body.description !== undefined) updateData.description = body.description?.trim() || null;
     if (body.status !== undefined) {
+      if (!isValidTaskStatus(body.status)) {
+        return NextResponse.json({ error: `유효하지 않은 상태: ${body.status}` }, { status: 400 });
+      }
       updateData.status = body.status;
       if (body.status === "done") {
         updateData.completedAt = now;
@@ -62,7 +60,12 @@ export async function PATCH(
         updateData.completedAt = null;
       }
     }
-    if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.priority !== undefined) {
+      if (!isValidPriority(body.priority)) {
+        return NextResponse.json({ error: `유효하지 않은 우선순위: ${body.priority}` }, { status: 400 });
+      }
+      updateData.priority = body.priority;
+    }
     if (body.dueDate !== undefined) updateData.dueDate = body.dueDate || null;
 
     await db
@@ -86,7 +89,7 @@ export async function PATCH(
     if (body.status !== undefined && jira.isJiraConfigured()) {
       const jiraLink = links.find((l) => l.linkType === "jira");
       if (jiraLink?.jiraIssueKey) {
-        const targetJiraStatus = TODO_TO_JIRA_STATUS[body.status];
+        const targetJiraStatus = TODO_TO_JIRA[body.status];
         if (targetJiraStatus) {
           try {
             const transitions = await jira.getTransitions(jiraLink.jiraIssueKey);
@@ -105,8 +108,9 @@ export async function PATCH(
               console.warn(`[Task PATCH] Jira transition '${targetJiraStatus}' not found for ${jiraLink.jiraIssueKey}`);
             }
           } catch (e) {
-            // Jira 동기화 실패해도 TO-DO 변경은 유지
             console.error(`[Task PATCH] Jira sync failed for ${jiraLink.jiraIssueKey}:`, e);
+            _warnings = _warnings || [];
+            _warnings.push(`Jira ${jiraLink.jiraIssueKey} 상태 동기화 실패: ${e}`);
           }
         }
       }
@@ -123,11 +127,15 @@ export async function PATCH(
           console.log(`[Task PATCH] Jira ${jiraLink.jiraIssueKey} 기한 → ${body.dueDate || "없음"}`);
         } catch (e) {
           console.error(`[Task PATCH] Jira due date sync failed for ${jiraLink.jiraIssueKey}:`, e);
+          _warnings = _warnings || [];
+          _warnings.push(`Jira ${jiraLink.jiraIssueKey} 기한 동기화 실패: ${e}`);
         }
       }
     }
 
-    return NextResponse.json({ ...updated, links });
+    const response: Record<string, any> = { ...updated, links };
+    if (_warnings?.length) response._warnings = _warnings;
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Failed to update task:", error);
     return NextResponse.json({ error: "할일 수정 실패" }, { status: 500 });

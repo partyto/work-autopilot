@@ -18,9 +18,7 @@ export default function RootLayout({
         <header className="sticky top-0 z-50 glass">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-md shadow-blue-500/20">
-                <span className="text-sm font-bold text-white tracking-wide">W</span>
-              </div>
+              <img src="/icon-192.png" alt="Work Pavlotrasche" className="w-9 h-9 rounded-xl shadow-md" />
               <div>
                 <h1 className="text-lg font-bold gradient-text leading-none">Work Pavlotrasche</h1>
                 <p className="text-xs text-slate-500 mt-0.5 tracking-wide">업무 자동화 대시보드</p>

@@ -7,7 +7,18 @@ const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN || "";
 const SLACK_USER_TOKEN = process.env.SLACK_USER_TOKEN || "";
 const SLACK_USER_ID = process.env.SLACK_USER_ID || "U042YQ0RUAY";
 
+// Slack API 레이트 리밋 (Tier 3: ~50 req/min → 최소 1200ms 간격)
+let lastCallTime = 0;
+const MIN_INTERVAL_MS = 1200;
+
+async function throttle() {
+  const wait = MIN_INTERVAL_MS - (Date.now() - lastCallTime);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastCallTime = Date.now();
+}
+
 async function slackApi(method: string, body: Record<string, any> = {}) {
+  await throttle();
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
     headers: {

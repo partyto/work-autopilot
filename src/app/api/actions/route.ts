@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { generateId, nowLocal } from "@/lib/utils";
-import type { Action } from "@/db/schema";
+import type { Action, Task } from "@/db/schema";
+import type { ActionStatus } from "@/db/types";
 
 // GET /api/actions - 액션 목록 조회
 export async function GET(request: NextRequest) {
@@ -11,8 +12,8 @@ export async function GET(request: NextRequest) {
   const taskId = searchParams.get("taskId");
 
   try {
-    let conditions = [];
-    if (status) conditions.push(eq(schema.actions.status, status as any));
+    const conditions = [];
+    if (status) conditions.push(eq(schema.actions.status, status as ActionStatus));
     if (taskId) conditions.push(eq(schema.actions.taskId, taskId));
 
     const actionList = await db.query.actions.findMany({
@@ -20,15 +21,22 @@ export async function GET(request: NextRequest) {
       orderBy: [desc(schema.actions.proposedAt)],
     });
 
-    // 각 액션에 연결된 task 정보도 함께 반환
-    const actionsWithTask = await Promise.all(
-      actionList.map(async (action: Action) => {
-        const task = await db.query.tasks.findFirst({
-          where: eq(schema.tasks.id, action.taskId),
-        });
-        return { ...action, task: task ? { id: task.id, title: task.title, status: task.status } : null };
-      })
-    );
+    // N+1 방지: 한 번에 전체 task 조회 후 그룹핑
+    const taskIds = [...new Set(actionList.map((a: Action) => a.taskId))];
+    const taskMap = new Map<string, { id: string; title: string; status: string }>();
+    if (taskIds.length > 0) {
+      const taskList = await db.query.tasks.findMany({
+        where: inArray(schema.tasks.id, taskIds),
+        columns: { id: true, title: true, status: true },
+      });
+      for (const t of taskList) {
+        taskMap.set(t.id, t);
+      }
+    }
+    const actionsWithTask = actionList.map((action: Action) => ({
+      ...action,
+      task: taskMap.get(action.taskId) || null,
+    }));
 
     return NextResponse.json(actionsWithTask);
   } catch (error) {

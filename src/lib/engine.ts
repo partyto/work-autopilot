@@ -5,53 +5,14 @@ import { generateId, nowLocal, todayDate } from "@/lib/utils";
 import * as jira from "@/lib/integrations/jira";
 import * as slack from "@/lib/integrations/slack";
 import * as gcal from "@/lib/integrations/gcal";
+import {
+  TODO_TO_JIRA, TODO_STATUS_LEVEL, TODO_STATUS_LABEL,
+  jiraStatusLevel, jiraStatusToTodo, todoStatusToJira,
+} from "@/lib/status-mapping";
+import type { TaskStatus, ActionStatus, ActionType, LinkType } from "@/db/types";
 
-// ===== 상태 매핑 =====
-// TO-DO → Jira 상태 매핑
-const TODO_TO_JIRA: Record<string, string> = {
-  done: "DONE",
-  in_progress: "IN PROGRESS",
-  in_qa: "IN QA",
-  pending: "BACKLOG",
-};
-
-// 상태 우선순위 (높을수록 더 앞선 상태)
-const TODO_STATUS_LEVEL: Record<string, number> = {
-  pending: 0,
-  in_progress: 1,
-  in_qa: 2,
-  done: 3,
-  cancelled: -1,
-};
-
-function jiraStatusLevel(jiraStatus: string): number {
-  const upper = jiraStatus.toUpperCase();
-  if (upper === "DONE" || upper.includes("DONE") || upper.includes("CLOSED")) return 3;
-  if (upper.includes("QA") || upper.includes("REVIEW") || upper.includes("TEST")) return 2;
-  if (upper.includes("PROGRESS")) return 1;
-  if (upper === "BACKLOG" || upper === "TO DO" || upper === "OPEN" || upper === "TODO") return 0;
-  return 0;
-}
-
-function jiraStatusToTodo(jiraStatus: string): string | null {
-  const upper = jiraStatus.toUpperCase();
-  if (upper === "DONE" || upper.includes("DONE") || upper.includes("CLOSED")) return "done";
-  if (upper.includes("QA") || upper.includes("REVIEW") || upper.includes("TEST")) return "in_qa";
-  if (upper.includes("PROGRESS")) return "in_progress";
-  if (upper === "BACKLOG" || upper === "TO DO" || upper === "OPEN" || upper === "TODO") return "pending";
-  return null; // 매핑 불가
-}
-
-function todoStatusToJira(todoStatus: string): string | null {
-  return TODO_TO_JIRA[todoStatus] || null;
-}
-
-const TODO_STATUS_LABEL: Record<string, string> = {
-  pending: "대기",
-  in_progress: "진행 중",
-  in_qa: "IN-QA",
-  done: "완료",
-};
+// 동시 실행 방지 락
+let scanInProgress = false;
 
 // ===== 일일 스캔 =====
 // sendReport=true → Slack DM 발송 (17:30 일일 리포트용)
@@ -61,6 +22,22 @@ export type ScanResultItem =
   | { type: "slack"; channel: string; preview: string; url: string };
 
 export async function runDailyScan(sendReport: boolean = true): Promise<{
+  message: string;
+  scanItems: ScanResultItem[];
+}> {
+  if (scanInProgress) {
+    console.warn("[Engine] Scan already running, skipping");
+    return { message: "스캔이 이미 진행 중입니다", scanItems: [] };
+  }
+  scanInProgress = true;
+  try {
+    return await _runDailyScanInternal(sendReport);
+  } finally {
+    scanInProgress = false;
+  }
+}
+
+async function _runDailyScanInternal(sendReport: boolean): Promise<{
   message: string;
   scanItems: ScanResultItem[];
 }> {
@@ -216,7 +193,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
 
   // --- Step 3.5: 승인 대기 액션 수 ---
   const pendingActions = await db.query.actions.findMany({
-    where: eq(schema.actions.status, "proposed" as any),
+    where: eq(schema.actions.status, "proposed" as ActionStatus),
   });
   if (pendingActions.length > 0) {
     report.push(`\n*🔔 승인 대기 액션: ${pendingActions.length}건*`);
@@ -252,7 +229,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
           ...newlyProposedActions.map((d) => `• ${d}`),
           `\n👉 대시보드에서 확인하세요.`,
         ];
-        await slack.sendDM(alertLines.join("\n")).catch(() => {});
+        await slack.sendDM(alertLines.join("\n")).catch((err) => console.error("[Engine] Alert DM failed:", err));
       }
       // 리포트 DB 저장
       await db.insert(schema.dailyReports).values({
@@ -282,7 +259,7 @@ export async function runDailyScan(sendReport: boolean = true): Promise<{
         ...newlyProposedActions.map((d) => `• ${d}`),
         `\n👉 대시보드에서 확인하세요.`,
       ];
-      await slack.sendDM(alertLines.join("\n")).catch(() => {});
+      await slack.sendDM(alertLines.join("\n")).catch((err) => console.error("[Engine] Alert DM failed:", err));
     }
     console.log("[Engine] Scan-only mode: report suppressed");
   } else {
@@ -330,7 +307,7 @@ async function scanSlackMentions(): Promise<{
 
   // 기존 todo_create 액션 payload 목록 미리 로드 (중복 감지용)
   const existingTodoActions = await db.query.actions.findMany({
-    where: eq(schema.actions.actionType, "todo_create" as any),
+    where: eq(schema.actions.actionType, "todo_create" as ActionType),
   });
   const processedThreadTs = new Set<string>(
     existingTodoActions
@@ -420,7 +397,7 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
 
   // 이미 액션이 제안된 Jira 이슈 키 목록 (중복 방지)
   const existingJiraActions = await db.query.actions.findMany({
-    where: eq(schema.actions.actionType, "todo_create" as any),
+    where: eq(schema.actions.actionType, "todo_create" as ActionType),
   });
   const processedJiraKeys = new Set<string>(
     existingJiraActions.map((a) => {
@@ -529,7 +506,7 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
     const existingAction = await db.query.actions.findFirst({
       where: and(
         eq(schema.actions.taskId, task.id),
-        eq(schema.actions.status, "proposed" as any),
+        eq(schema.actions.status, "proposed" as ActionStatus),
       ),
     });
 
@@ -537,7 +514,7 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
       // 상태 일치 → 기존 proposed 액션 자동 취소
       if (existingAction) {
         await db.update(schema.actions)
-          .set({ status: "cancelled" as any })
+          .set({ status: "cancelled" as ActionStatus })
           .where(eq(schema.actions.id, existingAction.id));
         console.log(`[Engine] 상태 일치 → 액션 자동 취소: ${existingAction.description}`);
       }
@@ -603,7 +580,7 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
 // ===== 승인된 액션 실행 =====
 export async function executeApprovedActions() {
   const approved = await db.query.actions.findMany({
-    where: eq(schema.actions.status, "approved" as any),
+    where: eq(schema.actions.status, "approved" as ActionStatus),
   });
 
   if (approved.length === 0) return;
@@ -809,8 +786,8 @@ async function scanGoogleCalendar(): Promise<{
     // 이미 처리된 이벤트인지 확인
     const existing = await db.query.taskLinks.findFirst({
       where: and(
-        eq(schema.taskLinks.linkType, "gcal" as any),
-        eq(schema.taskLinks.gcalEventId as any, event.id),
+        eq(schema.taskLinks.linkType, "gcal" as LinkType),
+        eq(schema.taskLinks.gcalEventId, event.id),
       ),
     });
     if (existing) continue;
@@ -841,7 +818,7 @@ async function scanGoogleCalendar(): Promise<{
     await db.insert(schema.taskLinks).values({
       id:             generateId(),
       taskId:         placeholderTaskId,
-      linkType:       "gcal" as any,
+      linkType:       "gcal" as LinkType,
       gcalEventId:    event.id,
       gcalCalendarId: gcal.GCAL_CALENDAR_ID,
       createdAt:      now,

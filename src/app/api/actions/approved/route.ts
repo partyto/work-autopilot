@@ -1,36 +1,43 @@
 import { NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq } from "drizzle-orm";
-import type { Action } from "@/db/schema";
+import { eq, inArray } from "drizzle-orm";
+import type { Action, Task, TaskLink } from "@/db/schema";
+import type { ActionStatus } from "@/db/types";
 
 // GET /api/actions/approved - 승인됐지만 아직 실행되지 않은 액션 조회
-// Scheduled Task(실행 엔진)가 이 엔드포인트를 호출해서 실행할 액션 목록을 가져감
 export async function GET() {
   try {
     const approvedActions = await db.query.actions.findMany({
-      where: eq(schema.actions.status, "approved" as any),
+      where: eq(schema.actions.status, "approved" as ActionStatus),
     });
 
-    // 각 액션에 연결된 task + link 정보 함께 반환
-    const actionsWithContext = await Promise.all(
-      approvedActions.map(async (action: Action) => {
-        const task = await db.query.tasks.findFirst({
-          where: eq(schema.tasks.id, action.taskId),
-        });
-        const links = task
-          ? await db.query.taskLinks.findMany({
-              where: eq(schema.taskLinks.taskId, task.id),
-            })
-          : [];
+    if (approvedActions.length === 0) {
+      return NextResponse.json([]);
+    }
 
-        return {
-          ...action,
-          payload: action.payload ? JSON.parse(action.payload) : null,
-          task: task ? { id: task.id, title: task.title, status: task.status } : null,
-          links,
-        };
-      })
-    );
+    // N+1 방지: 한 번에 전체 조회
+    const taskIds = [...new Set(approvedActions.map((a: Action) => a.taskId))];
+    const [taskList, linkList] = await Promise.all([
+      db.query.tasks.findMany({ where: inArray(schema.tasks.id, taskIds) }),
+      db.query.taskLinks.findMany({ where: inArray(schema.taskLinks.taskId, taskIds) }),
+    ]);
+    const taskMap = new Map(taskList.map((t: Task) => [t.id, t]));
+    const linksByTask = new Map<string, TaskLink[]>();
+    for (const link of linkList) {
+      const arr = linksByTask.get(link.taskId) || [];
+      arr.push(link);
+      linksByTask.set(link.taskId, arr);
+    }
+
+    const actionsWithContext = approvedActions.map((action: Action) => {
+      const task = taskMap.get(action.taskId);
+      return {
+        ...action,
+        payload: action.payload ? JSON.parse(action.payload) : null,
+        task: task ? { id: task.id, title: task.title, status: task.status } : null,
+        links: linksByTask.get(action.taskId) || [],
+      };
+    });
 
     return NextResponse.json(actionsWithContext);
   } catch (error) {
