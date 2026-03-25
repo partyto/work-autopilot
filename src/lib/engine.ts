@@ -714,6 +714,15 @@ export async function executeApprovedActions() {
             executedAt: now,
           }).where(eq(schema.actions.id, action.id));
 
+          // Slack 스레드에 할당 확인 리액션 추가
+          if (channelId && threadTs && slack.isSlackConfigured()) {
+            slack.addReaction(channelId, threadTs, "ballot_box_with_check").catch((e) => {
+              if (!String(e).includes("already_reacted")) {
+                console.warn("[Engine] Slack reaction failed:", e);
+              }
+            });
+          }
+
           results.push(`✅ TO-DO 생성: ${summary}`);
           executed++;
           break;

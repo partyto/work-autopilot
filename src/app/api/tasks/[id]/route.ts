@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { eq, and } from "drizzle-orm";
 import { nowLocal } from "@/lib/utils";
 import * as jira from "@/lib/integrations/jira";
+import * as slack from "@/lib/integrations/slack";
 import { TODO_TO_JIRA } from "@/lib/status-mapping";
 import { isValidTaskStatus, isValidPriority } from "@/db/types";
 
@@ -112,6 +113,24 @@ export async function PATCH(
             _warnings = _warnings || [];
             _warnings.push(`Jira ${jiraLink.jiraIssueKey} 상태 동기화 실패: ${e}`);
           }
+        }
+      }
+    }
+
+    // 상태 변경 시 Slack 리액션 추가
+    if (body.status !== undefined && slack.isSlackConfigured()) {
+      const slackLink = links.find((l) => l.linkType === "slack_thread");
+      if (slackLink?.slackChannelId && slackLink?.slackThreadTs) {
+        const emoji =
+          body.status === "done" ? "white_check_mark"
+          : body.status === "in_progress" || body.status === "in_qa" ? "eyes"
+          : null;
+        if (emoji) {
+          slack.addReaction(slackLink.slackChannelId, slackLink.slackThreadTs, emoji).catch((e) => {
+            if (!String(e).includes("already_reacted")) {
+              console.warn("[Task PATCH] Slack reaction failed:", e);
+            }
+          });
         }
       }
     }
