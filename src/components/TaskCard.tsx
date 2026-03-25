@@ -23,8 +23,10 @@ interface TaskLink {
   jiraIssueKey?: string | null;
   jiraIssueUrl?: string | null;
   jiraStatus?: string | null;
+  jiraCreatedAt?: string | null;
   slackThreadUrl?: string | null;
   slackChannelName?: string | null;
+  slackThreadTs?: string | null;
 }
 
 interface TaskCardProps {
@@ -99,6 +101,31 @@ function formatDateTime(iso: string): string {
   } catch {
     return iso.slice(0, 10);
   }
+}
+
+// Slack thread_ts ("1234567890.123456") → 날짜 문자열
+function formatSlackTs(ts: string): string {
+  try {
+    return formatDateTime(new Date(parseFloat(ts) * 1000).toISOString());
+  } catch {
+    return "";
+  }
+}
+
+// 카드에 표시할 기준 날짜 정보 반환
+function getOriginDate(
+  sourceType: string,
+  createdAt: string,
+  jiraLink?: TaskLink | null,
+  slackLink?: TaskLink | null
+): { label: string; value: string } {
+  if (sourceType === "jira_sync" && jiraLink?.jiraCreatedAt) {
+    return { label: "Jira 생성", value: formatDateTime(jiraLink.jiraCreatedAt) };
+  }
+  if (sourceType === "slack_detected" && slackLink?.slackThreadTs) {
+    return { label: "Slack 언급", value: formatSlackTs(slackLink.slackThreadTs) };
+  }
+  return { label: "생성", value: formatDateTime(createdAt) };
 }
 
 export default function TaskCard({ task, onUpdate }: TaskCardProps) {
@@ -335,7 +362,10 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                 </button>
               )}
 
-              <span className="text-[11px] text-slate-400">생성 {formatDateTime(task.createdAt)}</span>
+              {(() => {
+                const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
+                return <span className="text-[11px] text-slate-400">{label} {value}</span>;
+              })()}
               {task.completedAt && (
                 <span className="text-[11px] text-emerald-600">완료 {formatDateTime(task.completedAt)}</span>
               )}

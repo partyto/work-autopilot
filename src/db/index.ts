@@ -68,6 +68,7 @@ client.executeMultiple(initSQL).catch((err) => {
 const migrationSQL = [
   "ALTER TABLE task_links ADD COLUMN gcal_event_id TEXT",
   "ALTER TABLE task_links ADD COLUMN gcal_calendar_id TEXT",
+  "ALTER TABLE task_links ADD COLUMN jira_created_at TEXT",
   // sortOrder 추가 (드래그&드롭 정렬용)
   "ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0",
   // 인덱스 추가 (쿼리 성능 최적화)

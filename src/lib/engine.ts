@@ -445,6 +445,7 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
         jiraIssueKey: issue.key,
         jiraIssueUrl: issueUrl,
         jiraStatus: issue.fields.status.name,
+        jiraCreatedAt: jiraCreated,
         createdAt: now,
       });
 

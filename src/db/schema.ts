@@ -54,6 +54,8 @@ export const taskLinks = sqliteTable("task_links", {
   // Google Calendar 매핑
   gcalEventId: text("gcal_event_id"),
   gcalCalendarId: text("gcal_calendar_id"),
+  // Jira 이슈 생성일
+  jiraCreatedAt: text("jira_created_at"),
   // 동기화
   lastSyncedAt: text("last_synced_at"),
   createdAt: text("created_at")

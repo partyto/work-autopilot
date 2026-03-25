@@ -433,7 +433,6 @@ export default function Dashboard() {
 
             {/* 출처 필터 (2차 필터) */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-slate-400 font-medium">출처</span>
               {SOURCE_FILTERS.map((sf) => {
                 const isActive = sourceFilters.has(sf.key);
                 return (
