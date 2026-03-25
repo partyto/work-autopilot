@@ -25,7 +25,14 @@ async function jiraFetch(path: string, options: RequestInit = {}) {
     throw new Error(`Jira API error ${res.status}: ${text}`);
   }
 
-  return res.json();
+  // 204 No Content (예: transition POST) — 빈 바디이므로 json 파싱 생략
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return null;
+  }
+
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
 }
 
 // JQL로 이슈 검색
