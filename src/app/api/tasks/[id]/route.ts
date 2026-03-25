@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { nowLocal } from "@/lib/utils";
+import * as jira from "@/lib/integrations/jira";
+
+// TO-DO 상태 → Jira 전환 이름 매핑
+const TODO_TO_JIRA_STATUS: Record<string, string> = {
+  done: "Done",
+  in_progress: "In Progress",
+  pending: "Backlog",
+  in_qa: "In QA",
+};
 
 // GET /api/tasks/[id] - 단일 할일 조회
 export async function GET(
@@ -72,6 +81,36 @@ export async function PATCH(
     const links = await db.query.taskLinks.findMany({
       where: eq(schema.taskLinks.taskId, id),
     });
+
+    // 상태 변경 시 Jira 즉시 동기화
+    if (body.status !== undefined && jira.isJiraConfigured()) {
+      const jiraLink = links.find((l) => l.linkType === "jira");
+      if (jiraLink?.jiraIssueKey) {
+        const targetJiraStatus = TODO_TO_JIRA_STATUS[body.status];
+        if (targetJiraStatus) {
+          try {
+            const transitions = await jira.getTransitions(jiraLink.jiraIssueKey);
+            const target = transitions.find(
+              (t) => t.name.toUpperCase() === targetJiraStatus.toUpperCase() ||
+                     t.to?.name?.toUpperCase() === targetJiraStatus.toUpperCase()
+            );
+            if (target) {
+              await jira.transitionIssue(jiraLink.jiraIssueKey, target.id);
+              // Jira 상태 캐시 업데이트
+              await db.update(schema.taskLinks)
+                .set({ jiraStatus: targetJiraStatus, lastSyncedAt: nowLocal() })
+                .where(and(eq(schema.taskLinks.taskId, id), eq(schema.taskLinks.linkType, "jira")));
+              console.log(`[Task PATCH] Jira ${jiraLink.jiraIssueKey} → ${targetJiraStatus}`);
+            } else {
+              console.warn(`[Task PATCH] Jira transition '${targetJiraStatus}' not found for ${jiraLink.jiraIssueKey}`);
+            }
+          } catch (e) {
+            // Jira 동기화 실패해도 TO-DO 변경은 유지
+            console.error(`[Task PATCH] Jira sync failed for ${jiraLink.jiraIssueKey}:`, e);
+          }
+        }
+      }
+    }
 
     return NextResponse.json({ ...updated, links });
   } catch (error) {
