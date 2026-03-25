@@ -22,7 +22,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ScanLine,
-  Zap,
   CheckCircle2,
   Clock,
   AlertTriangle,
@@ -262,25 +261,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleExecuteNow = async () => {
-    setIsScanning(true);
-    const toastId = toast.loading("승인된 액션 실행 중...");
-    try {
-      const res = await fetch("/api/scan?type=execute", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        toast.success("액션 실행 완료!", { id: toastId });
-        handleRefreshAll();
-      } else {
-        toast.error("실행 실패: " + (data.error || "알 수 없는 오류"), { id: toastId });
-      }
-    } catch {
-      toast.error("실행 실패: 서버 연결 오류", { id: toastId });
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
   const filteredTasks = useMemo(() => {
     let base = kpiFilters.size > 0
       ? tasks.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)))
@@ -331,19 +311,6 @@ export default function Dashboard() {
         {/* 액션 버튼 */}
         <div className="flex items-center gap-2">
           <TaskForm onCreated={handleRefreshAll} />
-          <button
-            onClick={handleExecuteNow}
-            disabled={isScanning || stats.pendingActions === 0}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-50 hover:bg-amber-100 border border-amber-200 hover:border-amber-300 text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer"
-          >
-            <Zap size={13} />
-            액션 실행
-            {stats.pendingActions > 0 && (
-              <span className="bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full leading-none">
-                {stats.pendingActions}
-              </span>
-            )}
-          </button>
           <button
             onClick={handleScanNow}
             disabled={isScanning}
