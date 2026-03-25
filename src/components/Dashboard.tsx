@@ -257,10 +257,23 @@ export default function Dashboard() {
     noLink: (t) => !t.links || t.links.length === 0,
   };
 
-  const currentFilter = FILTER_TABS.find((t) => t.key === activeTab) || FILTER_TABS[0];
-  const filteredTasks = kpiFilter
+  const PRIORITY_LEVEL: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+  const sortTasks = (list: TaskWithLinks[]) =>
+    [...list].sort((a, b) => {
+      const pa = PRIORITY_LEVEL[a.priority] ?? 2;
+      const pb = PRIORITY_LEVEL[b.priority] ?? 2;
+      if (pa !== pb) return pa - pb;
+      const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+      const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+      if (da !== db) return da - db;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+
+  const baseTasks = kpiFilter
     ? tasks.filter(KPI_FILTERS[kpiFilter] ?? (() => true))
-    : tasks.filter(currentFilter.filter);
+    : tasks;
+  const filteredTasks = sortTasks(baseTasks);
 
   const handleKpiClick = (key: string) => {
     setKpiFilter((prev) => (prev === key ? null : key));
@@ -402,7 +415,7 @@ export default function Dashboard() {
           >
             <TaskForm onCreated={handleRefreshAll} />
 
-            {kpiFilter ? (
+            {kpiFilter && (
               <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
                 <span className="font-medium">
                   {{ pending: "대기", in_progress: "진행 중", done: "완료", overdue: "기한 초과", noLink: "연결 없음" }[kpiFilter]} 항목 필터 중
@@ -415,14 +428,6 @@ export default function Dashboard() {
                   <X size={11} /> 필터 해제
                 </button>
               </div>
-            ) : (
-              <FilterBar
-                tabs={FILTER_TABS}
-                active={activeTab}
-                onSelect={setActiveTab}
-                counts={FILTER_TABS.reduce((acc, t) => ({ ...acc, [t.key]: tasks.filter(t.filter).length }), {} as Record<string, number>)}
-                activeColor="bg-blue-600"
-              />
             )}
 
             {isLoading ? (
@@ -430,8 +435,8 @@ export default function Dashboard() {
             ) : filteredTasks.length === 0 ? (
               <EmptyState
                 icon={<ListTodo size={32} className="text-slate-300" />}
-                message={activeTab === "active" ? "진행 중인 할일이 없습니다" : "할일이 없습니다"}
-                sub={activeTab === "active" ? "위의 '+ 새 할일 추가' 버튼으로 시작하세요" : undefined}
+                message={kpiFilter ? "해당 조건의 할일이 없습니다" : "할일이 없습니다"}
+                sub={kpiFilter ? undefined : "위의 '+ 새 할일 추가' 버튼으로 시작하세요"}
               />
             ) : (
               <DndContext
