@@ -389,7 +389,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
 
           {/* 우측 액션 */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-80 transition-opacity flex-shrink-0">
-            {task.description && (
+            {task.description && task.sourceType !== "slack_detected" && (
               <button
                 onClick={() => setExpanded(!expanded)}
                 className="p-2 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
@@ -406,8 +406,27 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
           </div>
         </div>
 
-        {/* 설명 */}
-        {expanded && task.description && (
+        {/* Slack 카드 본문 — 항상 1줄 미리보기, 클릭으로 펼치기 */}
+        {task.sourceType === "slack_detected" && task.description && (
+          <div
+            className="flex items-start gap-1.5 ml-5 mt-2 cursor-pointer group/desc"
+            onClick={() => setExpanded(!expanded)}
+          >
+            <MessageSquare size={11} className="flex-shrink-0 mt-0.5 text-slate-300" />
+            <p className={cn(
+              "flex-1 text-[11px] text-slate-400 leading-relaxed min-w-0 transition-all",
+              expanded ? "whitespace-pre-wrap break-words" : "truncate"
+            )}>
+              {task.description}
+            </p>
+            <span className="flex-shrink-0 mt-0.5 text-slate-300 group-hover/desc:text-slate-500 transition-colors">
+              {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </span>
+          </div>
+        )}
+
+        {/* 일반 설명 (비 Slack 카드) */}
+        {expanded && task.description && task.sourceType !== "slack_detected" && (
           <motion.p
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
