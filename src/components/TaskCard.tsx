@@ -244,7 +244,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
     <motion.div
       layout
       className={cn(
-        "group relative bg-[var(--surface)] border rounded-2xl overflow-visible transition-all duration-200 shadow-[var(--shadow-card)]",
+        "group relative bg-white border rounded-2xl overflow-visible transition-all duration-200 shadow-[var(--shadow-card)]",
         isDone
           ? "border-[var(--border)] opacity-60"
           : isDue

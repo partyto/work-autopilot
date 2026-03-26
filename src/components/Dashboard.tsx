@@ -37,6 +37,7 @@ import {
   MessageSquare,
   X,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import TaskForm from "./TaskForm";
 import TaskCard from "./TaskCard";
 import ActionCard from "./ActionCard";
@@ -307,10 +308,12 @@ export default function Dashboard() {
     <div className="space-y-7">
       {/* 상단 컨트롤 바 */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* 연결 상태 */}
-        <div className="flex items-center gap-4">
+        {/* 연결 상태 - 그룹 pill */}
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
           <ConnStatus label="Jira" connected={scanStatus?.jira} />
+          <div className="w-px h-3.5 bg-slate-200 mx-1" />
           <ConnStatus label="Slack" connected={scanStatus?.slack} />
+          <div className="w-px h-3.5 bg-slate-200 mx-1" />
           <ConnStatus label="Scheduler" connected={scanStatus?.scheduler} />
         </div>
 
@@ -320,7 +323,7 @@ export default function Dashboard() {
           <button
             onClick={handleScanNow}
             disabled={isScanning}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-400 text-blue-700 disabled:opacity-50 rounded-xl transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 rounded-xl transition-all cursor-pointer shadow-sm shadow-blue-200"
           >
             <ScanLine size={13} />
             {isScanning ? "스캔 중..." : "지금 스캔"}
@@ -329,52 +332,42 @@ export default function Dashboard() {
       </div>
 
       {/* KPI 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
-        <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending} color="text-slate-600" borderColor="border-slate-200" active={kpiFilters.has("pending")} onClick={() => handleKpiClick("pending")} />
-        <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress} color="text-blue-600" borderColor="border-blue-200" active={kpiFilters.has("in_progress")} onClick={() => handleKpiClick("in_progress")} />
-        <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done} color="text-emerald-600" borderColor="border-emerald-200" active={kpiFilters.has("done")} onClick={() => handleKpiClick("done")} />
-        <KpiCard
-          icon={<CalendarDays size={14} />}
-          label="오늘 까지"
-          value={stats.dueToday}
-          color={stats.dueToday > 0 ? "text-orange-600" : "text-slate-400"}
-          borderColor={stats.dueToday > 0 ? "border-orange-200" : "border-slate-200"}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <KpiCard icon={<Clock size={15} />} label="대기" value={stats.pending}
+          iconClass="bg-slate-100 text-slate-500" activeIconClass="bg-slate-600 text-white"
+          valueClass="text-slate-700" activeBorderClass="border-slate-400"
+          active={kpiFilters.has("pending")} onClick={() => handleKpiClick("pending")} />
+        <KpiCard icon={<CircleDot size={15} />} label="진행 중" value={stats.inProgress}
+          iconClass="bg-blue-50 text-blue-500" activeIconClass="bg-blue-500 text-white"
+          valueClass="text-blue-600" activeBorderClass="border-blue-400"
+          active={kpiFilters.has("in_progress")} onClick={() => handleKpiClick("in_progress")} />
+        <KpiCard icon={<CheckCircle2 size={15} />} label="완료" value={stats.done}
+          iconClass="bg-emerald-50 text-emerald-500" activeIconClass="bg-emerald-500 text-white"
+          valueClass="text-emerald-600" activeBorderClass="border-emerald-400"
+          active={kpiFilters.has("done")} onClick={() => handleKpiClick("done")} />
+        <KpiCard icon={<CalendarDays size={15} />} label="오늘 까지" value={stats.dueToday}
+          iconClass="bg-orange-50 text-orange-500" activeIconClass="bg-orange-500 text-white"
+          valueClass="text-orange-600" activeBorderClass="border-orange-400"
           alert={stats.dueToday > 0}
-          active={kpiFilters.has("dueToday")}
-          onClick={() => handleKpiClick("dueToday")}
-        />
-        <KpiCard
-          icon={<AlertTriangle size={14} />}
-          label="기한 초과"
-          value={stats.overdue}
-          color={stats.overdue > 0 ? "text-red-600" : "text-slate-400"}
-          borderColor={stats.overdue > 0 ? "border-red-200" : "border-slate-200"}
+          active={kpiFilters.has("dueToday")} onClick={() => handleKpiClick("dueToday")} />
+        <KpiCard icon={<AlertTriangle size={15} />} label="기한 초과" value={stats.overdue}
+          iconClass="bg-red-50 text-red-500" activeIconClass="bg-red-500 text-white"
+          valueClass="text-red-600" activeBorderClass="border-red-400"
           alert={stats.overdue > 0}
-          active={kpiFilters.has("overdue")}
-          onClick={() => handleKpiClick("overdue")}
-        />
-        <KpiCard
-          icon={<Link2Off size={14} />}
-          label="연결 없음"
-          value={stats.noLink}
-          color={stats.noLink > 0 ? "text-yellow-600" : "text-slate-400"}
-          borderColor={stats.noLink > 0 ? "border-yellow-200" : "border-slate-200"}
-          active={kpiFilters.has("noLink")}
-          onClick={() => handleKpiClick("noLink")}
-        />
-        <KpiCard
-          icon={<Bell size={14} />}
-          label="승인 대기"
-          value={stats.pendingActions}
-          color={stats.pendingActions > 0 ? "text-amber-600" : "text-slate-400"}
-          borderColor={stats.pendingActions > 0 ? "border-amber-200" : "border-slate-200"}
+          active={kpiFilters.has("overdue")} onClick={() => handleKpiClick("overdue")} />
+        <KpiCard icon={<Link2Off size={15} />} label="연결 없음" value={stats.noLink}
+          iconClass="bg-yellow-50 text-yellow-600" activeIconClass="bg-yellow-500 text-white"
+          valueClass="text-yellow-600" activeBorderClass="border-yellow-400"
+          active={kpiFilters.has("noLink")} onClick={() => handleKpiClick("noLink")} />
+        <KpiCard icon={<Bell size={15} />} label="승인 대기" value={stats.pendingActions}
+          iconClass="bg-amber-50 text-amber-500" activeIconClass="bg-amber-500 text-white"
+          valueClass="text-amber-600" activeBorderClass="border-amber-400"
           alert={stats.pendingActions > 0}
-          onClick={() => { setKpiFilters(new Set()); setActiveSection("actions"); }}
-        />
+          onClick={() => { setKpiFilters(new Set()); setActiveSection("actions"); }} />
       </div>
 
       {/* 섹션 탭 */}
-      <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1.5 w-fit shadow-[var(--shadow-card)]">
+      <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-2xl p-1 w-fit shadow-sm">
         <SectionTab
           active={activeSection === "tasks"}
           onClick={() => setActiveSection("tasks")}
@@ -415,7 +408,7 @@ export default function Dashboard() {
             {/* TaskForm moved to top control bar */}
 
             {/* 출처 필터 (2차 필터) */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {SOURCE_FILTERS.map((sf) => {
                 const isActive = sourceFilters.has(sf.key);
                 return (
@@ -427,7 +420,10 @@ export default function Dashboard() {
                       else next.add(sf.key);
                       return next;
                     })}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${isActive ? sf.activeColor : sf.color}`}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer tracking-wide",
+                      isActive ? sf.activeColor : sf.color
+                    )}
                   >
                     {sf.label}
                   </button>
@@ -436,7 +432,7 @@ export default function Dashboard() {
               {sourceFilters.size > 0 && (
                 <button
                   onClick={() => setSourceFilters(new Set())}
-                  className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                  className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 transition-all cursor-pointer px-1"
                 >
                   <X size={11} /> 해제
                 </button>
@@ -444,20 +440,20 @@ export default function Dashboard() {
             </div>
 
             {kpiFilters.size > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700 flex-wrap">
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50/80 border border-blue-100 rounded-2xl text-sm text-blue-700 flex-wrap">
                 {Array.from(kpiFilters).map((k) => {
                   const label = { pending: "대기", in_progress: "진행 중", done: "완료", dueToday: "오늘 까지", overdue: "기한 초과", noLink: "연결 없음" }[k];
                   return (
-                    <span key={k} className="flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded-lg text-xs font-medium">
+                    <span key={k} className="flex items-center gap-1 bg-white border border-blue-200 px-2.5 py-1 rounded-xl text-xs font-semibold shadow-sm">
                       {label}
-                      <button onClick={() => handleKpiClick(k)} className="hover:text-blue-900"><X size={10} /></button>
+                      <button onClick={() => handleKpiClick(k)} className="hover:text-blue-900 ml-0.5"><X size={10} /></button>
                     </span>
                   );
                 })}
-                <span className="text-blue-400 text-xs">({filteredTasks.length}건)</span>
+                <span className="text-blue-400 text-xs font-medium">{filteredTasks.length}건</span>
                 <button
                   onClick={() => setKpiFilters(new Set())}
-                  className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded-lg transition-all"
+                  className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-100 px-2 py-1 rounded-xl transition-all"
                 >
                   <X size={11} /> 전체 해제
                 </button>
@@ -635,36 +631,48 @@ export default function Dashboard() {
 // ===== 서브 컴포넌트 =====
 
 function KpiCard({
-  icon, label, value, color, borderColor, alert, active, onClick,
+  icon, label, value,
+  iconClass, activeIconClass, valueClass, activeBorderClass,
+  alert, active, onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
-  color: string;
-  borderColor: string;
+  iconClass: string;
+  activeIconClass: string;
+  valueClass: string;
+  activeBorderClass: string;
   alert?: boolean;
   active?: boolean;
   onClick?: () => void;
 }) {
   return (
     <motion.div
-      whileHover={{ y: -2 }}
+      whileHover={{ y: -2, transition: { duration: 0.15 } }}
       whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className={`relative bg-[var(--surface)] border-2 rounded-xl px-4 py-4 shadow-[var(--shadow-card)] transition-all cursor-pointer hover:shadow-[var(--shadow-card-hover)] ${
-        active ? `${borderColor} ring-2 ring-offset-1 ring-current/20 bg-slate-50` : "border-slate-100"
-      } ${alert && !active ? "glow-amber" : ""}`}
+      className={cn(
+        "relative bg-white rounded-2xl p-4 cursor-pointer transition-all duration-200",
+        active
+          ? `border-2 ${activeBorderClass} shadow-md`
+          : "border border-slate-100 shadow-sm hover:border-slate-200 hover:shadow-[var(--shadow-card-hover)]"
+      )}
     >
-      <div className={`flex items-center gap-2 mb-2 ${color} opacity-70`}>
+      <div className={cn(
+        "w-8 h-8 rounded-xl flex items-center justify-center mb-3 transition-all",
+        active ? activeIconClass : iconClass
+      )}>
         {icon}
-        <span className="text-xs font-medium">{label}</span>
       </div>
-      <div className={`text-3xl font-bold tracking-tight ${color}`}>{value}</div>
+      <div className={cn(
+        "text-3xl font-bold tracking-tight leading-none",
+        value > 0 ? valueClass : "text-slate-200"
+      )}>
+        {value}
+      </div>
+      <div className="text-[11px] font-medium text-slate-400 mt-1.5 tracking-wide">{label}</div>
       {alert && value > 0 && !active && (
         <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-amber-400 animate-soft-pulse" />
-      )}
-      {active && (
-        <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-500" />
       )}
     </motion.div>
   );
@@ -672,11 +680,12 @@ function KpiCard({
 
 function ConnStatus({ label, connected }: { label: string; connected?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className={`w-2 h-2 rounded-full transition-colors ${
-        connected === undefined ? "bg-slate-300" : connected ? "bg-emerald-500 shadow-sm shadow-emerald-400/50" : "bg-red-500"
-      }`} />
-      <span className="text-xs text-slate-500">{label}</span>
+    <div className="flex items-center gap-1.5">
+      <div className={cn(
+        "w-1.5 h-1.5 rounded-full transition-colors",
+        connected === undefined ? "bg-slate-300" : connected ? "bg-emerald-500" : "bg-red-400"
+      )} />
+      <span className="text-xs font-medium text-slate-500">{label}</span>
     </div>
   );
 }
@@ -695,21 +704,22 @@ function SectionTab({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium transition-all rounded-lg cursor-pointer ${
+      className={cn(
+        "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all rounded-xl cursor-pointer",
         active
-          ? `${activeColor} bg-white shadow-sm`
-          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-      }`}
+          ? `${activeColor} bg-slate-50 shadow-sm border border-slate-100`
+          : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+      )}
     >
       {icon}
       {label}
       {count !== undefined && (
         badge ? (
-          <span className="text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded-full leading-none ml-1">
+          <span className="text-[11px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full leading-none font-bold">
             {count}
           </span>
         ) : (
-          <span className="text-xs opacity-50 ml-1">{count}</span>
+          <span className="text-xs text-slate-400 font-normal">{count}</span>
         )
       )}
     </button>
