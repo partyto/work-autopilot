@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ===== TO-DO 목록 (Single Source of Truth) =====
@@ -104,6 +104,18 @@ export const dailyReports = sqliteTable("daily_reports", {
     .notNull()
     .default(sql`(datetime('now', 'localtime'))`),
 });
+
+// ===== 하루 시작/마무리 워크플로 로그 =====
+export const workflowLogs = sqliteTable("workflow_logs", {
+  id: text("id").primaryKey(),
+  type: text("type", { enum: ["eod", "sod"] }).notNull(),
+  date: text("date").notNull(),          // YYYY-MM-DD
+  summary: text("summary"),             // JSON
+  slackMessageTs: text("slack_message_ts"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now', 'localtime'))`),
+}, (t) => [uniqueIndex("workflow_logs_date_type").on(t.date, t.type)]);
 
 // ===== Type exports =====
 export type Task = typeof tasks.$inferSelect;

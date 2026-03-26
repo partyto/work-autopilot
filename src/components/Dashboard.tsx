@@ -36,6 +36,8 @@ import {
   ExternalLink,
   MessageSquare,
   X,
+  Sunrise,
+  Sunset,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TaskForm from "./TaskForm";
@@ -81,6 +83,16 @@ type ScanStatus = {
   jira: boolean;
   slack: boolean;
   scheduler: boolean;
+};
+
+type WorkflowStatus = {
+  lastEod: { date: string; createdAt: string; summary: { completed: number; carriedOver: number; overdue: number } | null } | null;
+  lastSod: { date: string; createdAt: string; summary: { carriedOverCount: number; newTodayCount: number; dueTodayCount: number } | null } | null;
+  nextEodDate: string;
+  nextEodTime: string;
+  nextSodDate: string;
+  nextSodTime: string;
+  nextAction: "eod" | "sod";
 };
 
 type ScanResultItem =
@@ -154,6 +166,8 @@ export default function Dashboard() {
   const [lastScanItems, setLastScanItems] = useState<ScanResultItem[] | null>(null);
   const [kpiFilters, setKpiFilters] = useState<Set<string>>(new Set());
   const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set());
+  const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
+  const [workflowRunning, setWorkflowRunning] = useState<"eod" | "sod" | null>(null);
 
   // DnD 센서 설정
   const sensors = useSensors(
@@ -199,9 +213,43 @@ export default function Dashboard() {
     }
   }, []);
 
+  const fetchWorkflowStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/daily");
+      if (res.ok) setWorkflowStatus(await res.json());
+    } catch (err) {
+      console.warn("[Dashboard] Workflow status fetch failed:", err);
+    }
+  }, []);
+
+  const handleWorkflow = async (type: "eod" | "sod") => {
+    setWorkflowRunning(type);
+    const label = type === "eod" ? "하루 마무리" : "하루 시작";
+    const toastId = toast.loading(`${label} 처리 중...`);
+    try {
+      const res = await fetch("/api/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${label} 완료! Slack DM을 확인하세요.`, { id: toastId });
+        fetchWorkflowStatus();
+        handleRefreshAll();
+      } else {
+        toast.error(`${label} 실패: ${data.error || "오류"}`, { id: toastId });
+      }
+    } catch {
+      toast.error(`${label} 실패: 서버 오류`, { id: toastId });
+    } finally {
+      setWorkflowRunning(null);
+    }
+  };
+
   useEffect(() => {
-    Promise.all([fetchTasks(), fetchActions(), fetchScanStatus(), fetchReports()]);
-  }, [fetchTasks, fetchActions, fetchScanStatus, fetchReports]);
+    Promise.all([fetchTasks(), fetchActions(), fetchScanStatus(), fetchReports(), fetchWorkflowStatus()]);
+  }, [fetchTasks, fetchActions, fetchScanStatus, fetchReports, fetchWorkflowStatus]);
 
   const handleRefreshAll = useCallback(() => {
     Promise.all([fetchTasks(), fetchActions(), fetchReports()]);
@@ -330,6 +378,13 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* 워크플로 바 */}
+      <WorkflowBar
+        status={workflowStatus}
+        running={workflowRunning}
+        onTrigger={handleWorkflow}
+      />
 
       {/* KPI 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
@@ -861,6 +916,130 @@ function ReportCard({ report }: { report: DailyReport }) {
       ) : (
         <p className="text-xs text-slate-400">요약 데이터 없음</p>
       )}
+    </div>
+  );
+}
+
+// ===== 워크플로 바 =====
+function WorkflowBar({
+  status,
+  running,
+  onTrigger,
+}: {
+  status: WorkflowStatus | null;
+  running: "eod" | "sod" | null;
+  onTrigger: (type: "eod" | "sod") => void;
+}) {
+  const formatDate = (isoTime: string) => {
+    try {
+      const d = new Date(isoTime);
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${mo}/${da} ${hh}:${mm}`;
+    } catch { return isoTime.slice(5, 16); }
+  };
+
+  const formatLastTime = (createdAt: string) => {
+    try {
+      const d = new Date(createdAt);
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${mo}/${da} ${hh}:${mm}`;
+    } catch { return createdAt.slice(5, 16); }
+  };
+
+  const isEodNext = status?.nextAction === "eod";
+  const isSodNext = status?.nextAction === "sod";
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-2">
+      {/* 하루 시작 */}
+      <div className={cn(
+        "flex-1 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all",
+        isSodNext
+          ? "bg-white border-slate-900 shadow-sm"
+          : "bg-white border-slate-100"
+      )}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={cn(
+            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+            isSodNext ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400"
+          )}>
+            <Sunrise size={14} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-slate-800 leading-tight">하루 시작</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+              {status?.lastSod
+                ? `마지막: ${formatLastTime(status.lastSod.createdAt)}`
+                : "미실행"}
+              {" · "}
+              <span className={isSodNext ? "text-slate-600 font-medium" : ""}>
+                다음: {status ? formatDate(status.nextSodTime) : "--"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => onTrigger("sod")}
+          disabled={running !== null}
+          className={cn(
+            "flex-shrink-0 px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all cursor-pointer disabled:opacity-50",
+            isSodNext
+              ? "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          )}
+          style={{ transition: `all 0.25s var(--spring)` }}
+        >
+          {running === "sod" ? "처리 중..." : "시작"}
+        </button>
+      </div>
+
+      {/* 하루 마무리 */}
+      <div className={cn(
+        "flex-1 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all",
+        isEodNext
+          ? "bg-white border-slate-900 shadow-sm"
+          : "bg-white border-slate-100"
+      )}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={cn(
+            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+            isEodNext ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400"
+          )}>
+            <Sunset size={14} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-slate-800 leading-tight">하루 마무리</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+              {status?.lastEod
+                ? `마지막: ${formatLastTime(status.lastEod.createdAt)}`
+                : "미실행"}
+              {" · "}
+              <span className={isEodNext ? "text-slate-600 font-medium" : ""}>
+                다음: {status ? formatDate(status.nextEodTime) : "--"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => onTrigger("eod")}
+          disabled={running !== null}
+          className={cn(
+            "flex-shrink-0 px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all cursor-pointer disabled:opacity-50",
+            isEodNext
+              ? "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          )}
+          style={{ transition: `all 0.25s var(--spring)` }}
+        >
+          {running === "eod" ? "처리 중..." : "마무리"}
+        </button>
+      </div>
     </div>
   );
 }

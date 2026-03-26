@@ -57,6 +57,15 @@ CREATE TABLE IF NOT EXISTS daily_reports (
   slack_message_ts TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
+CREATE TABLE IF NOT EXISTS workflow_logs (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  date TEXT NOT NULL,
+  summary TEXT,
+  slack_message_ts TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  UNIQUE(date, type)
+);
 `;
 
 // 앱 시작 시 테이블 초기화
