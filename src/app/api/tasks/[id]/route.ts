@@ -123,7 +123,7 @@ export async function PATCH(
       if (slackLink?.slackChannelId && slackLink?.slackThreadTs) {
         const emoji =
           body.status === "done" ? "white_check_mark"
-          : body.status === "in_progress" || body.status === "in_qa" ? "eyes"
+          : body.status === "in_progress" || body.status === "in_qa" ? "확인중2"
           : null;
         if (emoji) {
           slack.addReaction(slackLink.slackChannelId, slackLink.slackThreadTs, emoji).catch((e) => {
