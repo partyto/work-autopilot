@@ -1,6 +1,7 @@
 // Work Autopilot 핵심 엔진 — Jira/Slack 스캔 + 리포트 + 액션 실행
 import { db, schema } from "@/db";
 import { eq, and } from "drizzle-orm";
+import { summarizeSlackTitle } from "@/lib/ai";
 import { generateId, nowLocal, todayDate } from "@/lib/utils";
 import * as jira from "@/lib/integrations/jira";
 import * as slack from "@/lib/integrations/slack";
@@ -365,12 +366,23 @@ async function scanSlackMentions(): Promise<{
 
     if (hasActionKeyword) {
       // 키워드 매칭 → TO-DO 생성 제안
+      // 전체 Slack 본문 (포맷 정리 — description에 저장)
+      const fullText = text
+        .replace(/<@[A-Z0-9]+\|([^>]+)>/g, "@$1")
+        .replace(new RegExp(`<@${userId}>`, "g"), "@나")
+        .replace(/<@[A-Z0-9]+>/g, "@user")
+        .replace(/<[^>]+>/g, "")
+        .trim();
+
+      // LLM으로 30자 이내 타이틀 생성 (실패 시 preview 앞 30자)
+      const shortTitle = await summarizeSlackTitle(fullText);
+
       // 임시 태스크를 placeholder로 생성 (제안용)
       const placeholderTaskId = generateId();
       await db.insert(schema.tasks).values({
         id: placeholderTaskId,
-        title: `[Slack] ${preview}`,
-        description: `Slack #${channelName}에서 감지된 요청`,
+        title: shortTitle,
+        description: fullText,
         sourceType: "slack_detected",
         status: "pending",
         priority: "medium",
@@ -385,7 +397,8 @@ async function scanSlackMentions(): Promise<{
         actionType: "todo_create",
         description: actionDesc,
         payload: JSON.stringify({
-          summary: preview,
+          summary: shortTitle,
+          fullText,
           channelId,
           threadTs,
           threadUrl: permalink,
@@ -693,10 +706,11 @@ export async function executeApprovedActions() {
         }
 
         case "todo_create": {
-          const { summary, channelId, threadTs, threadUrl } = payload;
+          const { summary, fullText, channelId, threadTs, threadUrl } = payload;
           // placeholder task(action.taskId)를 실제 TO-DO로 활성화 (새 task 생성 안 함)
           await db.update(schema.tasks).set({
             title: summary || "Slack에서 감지된 할일",
+            description: fullText || null,
             updatedAt: now,
           }).where(eq(schema.tasks.id, action.taskId));
 

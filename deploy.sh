@@ -4,22 +4,16 @@
 
 set -e
 
-WORKSPACE="/Users/catchtable/Library/CloudStorage/SynologyDrive-your4leaf/claude/업무 자동화/work-autopilot"
-GIT_REPO="/Users/catchtable/work-autopilot"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NAS_USER="your4leaf"
 NAS_HOST="115.21.223.89"
 NAS_PORT="224"
 NAS_PATH="/volume1/docker/work-autopilot"
 COMMIT_MSG="${1:-"chore: auto deploy $(date '+%Y-%m-%d %H:%M')"}"
 
-echo "🔄 [1/4] Workspace → Git 동기화 중..."
-rsync -av --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='data' \
-  "$WORKSPACE/src/" "$GIT_REPO/src/"
-
-echo ""
-echo "📝 [2/4] Git 커밋 & Push 중..."
-cd "$GIT_REPO"
-git add src/
+echo "📝 [1/3] Git 커밋 & Push 중..."
+cd "$SCRIPT_DIR"
+git add -A -- ':!data' ':!.next' ':!node_modules'
 git diff --cached --stat
 
 if git diff --cached --quiet; then
@@ -34,12 +28,12 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 fi
 
 echo ""
-echo "🐳 [3/4] NAS Docker 이미지 Pull 중..."
+echo "🐳 [2/3] NAS Docker 이미지 Pull 중..."
 ssh -p "$NAS_PORT" "$NAS_USER@$NAS_HOST" \
   "cd $NAS_PATH && /usr/local/bin/docker compose pull"
 
 echo ""
-echo "🚀 [4/4] NAS 컨테이너 재시작 중..."
+echo "🚀 [3/3] NAS 컨테이너 재시작 중..."
 ssh -p "$NAS_PORT" "$NAS_USER@$NAS_HOST" \
   "cd $NAS_PATH && /usr/local/bin/docker compose up -d"
 

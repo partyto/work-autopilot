@@ -1,25 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
   ScanLine,
   CheckCircle2,
@@ -32,17 +15,19 @@ import {
   CircleDot,
   History,
   CalendarDays,
-  GripVertical,
   ExternalLink,
   MessageSquare,
   X,
   Sunrise,
   Sunset,
+  Ban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TaskForm from "./TaskForm";
 import TaskCard from "./TaskCard";
 import ActionCard from "./ActionCard";
+import WorkflowSODModal from "./WorkflowSODModal";
+import WorkflowEODModal from "./WorkflowEODModal";
 
 type TaskWithLinks = {
   id: string;
@@ -99,12 +84,6 @@ type ScanResultItem =
   | { type: "jira"; key: string; summary: string; status: string; url: string }
   | { type: "slack"; channel: string; preview: string; url: string };
 
-const FILTER_TABS = [
-  { key: "active", label: "진행 중", filter: (t: TaskWithLinks) => t.status !== "done" && t.status !== "cancelled" },
-  { key: "all", label: "전체", filter: () => true },
-  { key: "done", label: "완료", filter: (t: TaskWithLinks) => t.status === "done" },
-] as const;
-
 const ACTION_FILTER_TABS = [
   { key: "proposed", label: "대기", filter: (a: ActionWithTask) => a.status === "proposed" },
   { key: "all", label: "전체", filter: () => true },
@@ -157,9 +136,8 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<TaskWithLinks[]>([]);
   const [actions, setActions] = useState<ActionWithTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>("active");
   const [activeActionTab, setActiveActionTab] = useState<string>("proposed");
-  const [activeSection, setActiveSection] = useState<"tasks" | "actions" | "history">("tasks");
+  const [activeSection, setActiveSection] = useState<"tasks" | "actions" | "history" | "completed" | "cancelled">("tasks");
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [reports, setReports] = useState<DailyReport[]>([]);
@@ -168,12 +146,8 @@ export default function Dashboard() {
   const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set());
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
   const [workflowRunning, setWorkflowRunning] = useState<"eod" | "sod" | null>(null);
-
-  // DnD 센서 설정
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+  const [sodModalOpen, setSodModalOpen] = useState(false);
+  const [eodModalOpen, setEodModalOpen] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -222,30 +196,18 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleWorkflow = async (type: "eod" | "sod") => {
-    setWorkflowRunning(type);
-    const label = type === "eod" ? "하루 마무리" : "하루 시작";
-    const toastId = toast.loading(`${label} 처리 중...`);
-    try {
-      const res = await fetch("/api/daily", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`${label} 완료! Slack DM을 확인하세요.`, { id: toastId });
-        fetchWorkflowStatus();
-        handleRefreshAll();
-      } else {
-        toast.error(`${label} 실패: ${data.error || "오류"}`, { id: toastId });
-      }
-    } catch {
-      toast.error(`${label} 실패: 서버 오류`, { id: toastId });
-    } finally {
-      setWorkflowRunning(null);
-    }
+  const handleWorkflow = (type: "eod" | "sod") => {
+    if (type === "sod") setSodModalOpen(true);
+    else setEodModalOpen(true);
   };
+
+  const handleWorkflowSent = useCallback(() => {
+    setSodModalOpen(false);
+    setEodModalOpen(false);
+    fetchWorkflowStatus();
+    handleRefreshAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchWorkflowStatus]);
 
   useEffect(() => {
     Promise.all([fetchTasks(), fetchActions(), fetchScanStatus(), fetchReports(), fetchWorkflowStatus()]);
@@ -254,41 +216,6 @@ export default function Dashboard() {
   const handleRefreshAll = useCallback(() => {
     Promise.all([fetchTasks(), fetchActions(), fetchReports()]);
   }, [fetchTasks, fetchActions, fetchReports]);
-
-  // DnD stale closure 방지: ref로 최신 tasks 참조
-  const tasksRef = useRef(tasks);
-  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
-
-  // 드래그 완료 핸들러
-  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const currentFilter = FILTER_TABS.find((t) => t.key === activeTab) || FILTER_TABS[0];
-    const currentTasks = tasksRef.current;
-    const visibleTasks = currentTasks.filter(currentFilter.filter);
-
-    const oldIndex = visibleTasks.findIndex((t) => t.id === active.id);
-    const newIndex = visibleTasks.findIndex((t) => t.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    const reordered = arrayMove(visibleTasks, oldIndex, newIndex);
-
-    const visibleIds = new Set(visibleTasks.map((t) => t.id));
-    const nonVisible = currentTasks.filter((t) => !visibleIds.has(t.id));
-    setTasks([...reordered, ...nonVisible]);
-
-    try {
-      await fetch("/api/tasks/reorder", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: reordered.map((t) => t.id) }),
-      });
-    } catch {
-      toast.error("순서 저장 실패");
-      fetchTasks();
-    }
-  }, [activeTab, fetchTasks]);
 
   const handleScanNow = async () => {
     setIsScanning(true);
@@ -313,15 +240,28 @@ export default function Dashboard() {
     }
   };
 
-  const filteredTasks = useMemo(() => {
-    let base = kpiFilters.size > 0
-      ? tasks.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)))
-      : tasks;
-    if (sourceFilters.size > 0) {
-      base = base.filter((t) => sourceFilters.has(t.sourceType));
+  const applyColumnFilters = useCallback((base: TaskWithLinks[]) => {
+    let result = base;
+    if (kpiFilters.size > 0) {
+      result = result.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)));
     }
-    return sortTasks(base);
-  }, [tasks, kpiFilters, sourceFilters]);
+    if (sourceFilters.size > 0) {
+      result = result.filter((t) => sourceFilters.has(t.sourceType));
+    }
+    return sortTasks(result);
+  }, [kpiFilters, sourceFilters]);
+
+  const kanbanPending = useMemo(() =>
+    applyColumnFilters(tasks.filter((t) => t.status === "pending")),
+  [tasks, applyColumnFilters]);
+
+  const kanbanActive = useMemo(() =>
+    applyColumnFilters(tasks.filter((t) => t.status === "in_progress" || t.status === "in_qa")),
+  [tasks, applyColumnFilters]);
+
+  const kanbanDone = useMemo(() =>
+    applyColumnFilters(tasks.filter((t) => t.status === "done")),
+  [tasks, applyColumnFilters]);
 
   const handleKpiClick = (key: string) => {
     setKpiFilters((prev) => {
@@ -330,7 +270,7 @@ export default function Dashboard() {
       else next.add(key);
       return next;
     });
-    setActiveSection("tasks");
+    if (activeSection !== "tasks") setActiveSection("tasks");
   };
   const filteredActions = useMemo(() => {
     const tab = ACTION_FILTER_TABS.find((t) => t.key === activeActionTab) || ACTION_FILTER_TABS[0];
@@ -342,6 +282,7 @@ export default function Dashboard() {
     pending: tasks.filter((t) => t.status === "pending").length,
     inProgress: tasks.filter((t) => t.status === "in_progress" || t.status === "in_qa").length,
     done: tasks.filter((t) => t.status === "done").length,
+    cancelled: tasks.filter((t) => t.status === "cancelled").length,
     dueToday: tasks.filter(
       (t) => t.dueDate && t.status !== "done" && t.status !== "cancelled" && t.dueDate.slice(0, 10) === todayStr()
     ).length,
@@ -386,6 +327,26 @@ export default function Dashboard() {
         onTrigger={handleWorkflow}
       />
 
+      {/* SOD 모달 */}
+      <AnimatePresence>
+        {sodModalOpen && (
+          <WorkflowSODModal
+            onClose={() => setSodModalOpen(false)}
+            onSent={handleWorkflowSent}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* EOD 모달 */}
+      <AnimatePresence>
+        {eodModalOpen && (
+          <WorkflowEODModal
+            onClose={() => setEodModalOpen(false)}
+            onSent={handleWorkflowSent}
+          />
+        )}
+      </AnimatePresence>
+
       {/* KPI 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
         <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending}
@@ -399,7 +360,7 @@ export default function Dashboard() {
         <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done}
           activeIconClass="bg-emerald-500 text-white"
           activeValueClass="text-emerald-600" activeBorderClass="border-emerald-400"
-          active={kpiFilters.has("done")} onClick={() => handleKpiClick("done")} />
+          active={activeSection === "completed"} onClick={() => { setKpiFilters(new Set()); setActiveSection("completed"); }} />
         <KpiCard icon={<CalendarDays size={14} />} label="오늘 까지" value={stats.dueToday}
           activeIconClass="bg-orange-500 text-white"
           activeValueClass="text-orange-600" activeBorderClass="border-orange-400"
@@ -422,13 +383,13 @@ export default function Dashboard() {
       </div>
 
       {/* 섹션 탭 */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 flex-wrap">
         <SectionTab
           active={activeSection === "tasks"}
           onClick={() => setActiveSection("tasks")}
           icon={<ListTodo size={13} />}
           label="TO-DO"
-          count={tasks.length}
+          count={stats.pending + stats.inProgress}
         />
         <SectionTab
           active={activeSection === "actions"}
@@ -444,6 +405,22 @@ export default function Dashboard() {
           icon={<History size={13} />}
           label="스캔 이력"
         />
+        <SectionTab
+          active={activeSection === "completed"}
+          onClick={() => setActiveSection("completed")}
+          icon={<CheckCircle2 size={13} />}
+          label="완료 이력"
+          count={stats.done > 0 ? stats.done : undefined}
+        />
+        {stats.cancelled > 0 && (
+          <SectionTab
+            active={activeSection === "cancelled"}
+            onClick={() => setActiveSection("cancelled")}
+            icon={<Ban size={13} />}
+            label="취소 이력"
+            count={stats.cancelled}
+          />
+        )}
       </div>
 
       {/* TO-DO 섹션 */}
@@ -457,8 +434,6 @@ export default function Dashboard() {
             transition={{ duration: 0.2 }}
             className="space-y-4"
           >
-            {/* TaskForm moved to top control bar */}
-
             {/* 출처 필터 (2차 필터) */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {SOURCE_FILTERS.map((sf) => {
@@ -502,7 +477,7 @@ export default function Dashboard() {
                     </span>
                   );
                 })}
-                <span className="text-blue-400 text-xs font-medium">{filteredTasks.length}건</span>
+                <span className="text-blue-400 text-xs font-medium">{kanbanPending.length + kanbanActive.length + kanbanDone.length}건</span>
                 <button
                   onClick={() => setKpiFilters(new Set())}
                   className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-100 px-2 py-1 rounded-xl transition-all"
@@ -514,38 +489,33 @@ export default function Dashboard() {
 
             {isLoading ? (
               <LoadingSpinner />
-            ) : filteredTasks.length === 0 ? (
-              <EmptyState
-                icon={<ListTodo size={32} className="text-slate-300" />}
-                message={kpiFilters.size > 0 ? "해당 조건의 할일이 없습니다" : "할일이 없습니다"}
-                sub={kpiFilters.size > 0 ? undefined : "위의 '+ 새 할일 추가' 버튼으로 시작하세요"}
-              />
             ) : (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={filteredTasks.map((t) => t.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <motion.div
-                    className="space-y-3"
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                  >
-                    <AnimatePresence>
-                      {filteredTasks.map((task) => (
-                        <motion.div key={task.id} variants={itemVariants} exit="exit">
-                          <SortableTaskCard task={task} onUpdate={handleRefreshAll} />
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  </motion.div>
-                </SortableContext>
-              </DndContext>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                <KanbanColumn
+                  title="대기"
+                  tasks={kanbanPending}
+                  onUpdate={handleRefreshAll}
+                  dotColor="bg-slate-400"
+                  headerColor="text-slate-600"
+                  emptyLabel="대기 중인 할일 없음"
+                />
+                <KanbanColumn
+                  title="진행 중 · IN-QA"
+                  tasks={kanbanActive}
+                  onUpdate={handleRefreshAll}
+                  dotColor="bg-blue-500"
+                  headerColor="text-blue-600"
+                  emptyLabel="진행 중인 할일 없음"
+                />
+                <KanbanColumn
+                  title="완료"
+                  tasks={kanbanDone}
+                  onUpdate={handleRefreshAll}
+                  dotColor="bg-emerald-500"
+                  headerColor="text-emerald-600"
+                  emptyLabel="완료된 할일 없음"
+                />
+              </div>
             )}
           </motion.div>
         )}
@@ -590,6 +560,34 @@ export default function Dashboard() {
                 </AnimatePresence>
               </motion.div>
             )}
+          </motion.div>
+        )}
+
+        {/* 완료 이력 섹션 */}
+        {activeSection === "completed" && (
+          <motion.div
+            key="completed"
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <CompletedHistory tasks={tasks} onUpdate={handleRefreshAll} />
+          </motion.div>
+        )}
+
+        {/* 취소 이력 섹션 */}
+        {activeSection === "cancelled" && (
+          <motion.div
+            key="cancelled"
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <CancelledHistory tasks={tasks} onUpdate={handleRefreshAll} />
           </motion.div>
         )}
 
@@ -745,6 +743,71 @@ function ConnStatus({ label, connected }: { label: string; connected?: boolean }
   );
 }
 
+// ===== 완료 이력 =====
+function CompletedHistory({ tasks, onUpdate }: { tasks: TaskWithLinks[]; onUpdate: () => void }) {
+  const doneTasks = useMemo(() => {
+    return tasks
+      .filter((t) => t.status === "done")
+      .sort((a, b) => {
+        const aDate = a.completedAt ?? a.createdAt;
+        const bDate = b.completedAt ?? b.createdAt;
+        return bDate.localeCompare(aDate); // 최신순
+      });
+  }, [tasks]);
+
+  // 날짜별 그룹핑
+  const grouped = useMemo(() => {
+    const groups: { dateStr: string; label: string; tasks: TaskWithLinks[] }[] = [];
+    const map = new Map<string, TaskWithLinks[]>();
+    for (const t of doneTasks) {
+      const key = (t.completedAt ?? t.createdAt).slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterdayStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+    for (const [dateStr, items] of map.entries()) {
+      const label = dateStr === todayStr ? "오늘" : dateStr === yesterdayStr ? "어제" : dateStr;
+      groups.push({ dateStr, label, tasks: items });
+    }
+    groups.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+    return groups;
+  }, [doneTasks]);
+
+  if (doneTasks.length === 0) {
+    return (
+      <EmptyState
+        icon={<CheckCircle2 size={32} className="text-slate-300" />}
+        message="완료된 할일이 없습니다"
+        sub="할일을 완료 처리하면 여기에 날짜별로 모입니다"
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {grouped.map(({ dateStr, label, tasks: groupTasks }) => (
+        <div key={dateStr}>
+          {/* 날짜 헤더 */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              {label}
+            </span>
+            <span className="text-[11px] text-slate-400">{groupTasks.length}건 완료</span>
+            <div className="flex-1 h-px bg-slate-100" />
+          </div>
+          {/* 태스크 목록 */}
+          <div className="space-y-2">
+            {groupTasks.map((t) => (
+              <TaskCard key={t.id} task={t} onUpdate={onUpdate} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SectionTab({
   active, onClick, icon, label, count, badge,
 }: {
@@ -840,33 +903,98 @@ function EmptyState({ icon, message, sub }: { icon: React.ReactNode; message: st
   );
 }
 
-// ===== 드래그 가능한 TaskCard 래퍼 =====
-function SortableTaskCard({ task, onUpdate }: { task: TaskWithLinks; onUpdate: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: task.id,
-  });
+// ===== 칸반 컬럼 =====
+function KanbanColumn({
+  title, tasks, onUpdate, dotColor, headerColor, emptyLabel,
+}: {
+  title: string;
+  tasks: TaskWithLinks[];
+  onUpdate: () => void;
+  dotColor: string;
+  headerColor: string;
+  emptyLabel: string;
+}) {
+  return (
+    <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-100">
+      <div className="flex items-center gap-2 mb-3 px-1">
+        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
+        <span className="text-[12px] font-semibold text-slate-600 flex-1">{title}</span>
+        <span className={`text-[11px] font-semibold tabular-nums ${headerColor}`}>{tasks.length}</span>
+      </div>
+      {tasks.length === 0 ? (
+        <div className="flex items-center justify-center py-8 text-[11px] text-slate-300">{emptyLabel}</div>
+      ) : (
+        <motion.div
+          className="space-y-2"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          {tasks.map((task) => (
+            <motion.div key={task.id} variants={itemVariants}>
+              <TaskCard task={task} onUpdate={onUpdate} />
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
+    </div>
+  );
+}
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.6 : 1,
-  };
+// ===== 취소 이력 =====
+function CancelledHistory({ tasks, onUpdate }: { tasks: TaskWithLinks[]; onUpdate: () => void }) {
+  const cancelledTasks = useMemo(() => {
+    return tasks
+      .filter((t) => t.status === "cancelled")
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [tasks]);
+
+  const grouped = useMemo(() => {
+    const groups: { dateStr: string; label: string; tasks: TaskWithLinks[] }[] = [];
+    const map = new Map<string, TaskWithLinks[]>();
+    for (const t of cancelledTasks) {
+      const key = t.createdAt.slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+    for (const [dateStr, items] of map.entries()) {
+      const label = dateStr === today ? "오늘" : dateStr === yesterday ? "어제" : dateStr;
+      groups.push({ dateStr, label, tasks: items });
+    }
+    groups.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+    return groups;
+  }, [cancelledTasks]);
+
+  if (cancelledTasks.length === 0) {
+    return (
+      <EmptyState
+        icon={<Ban size={32} className="text-slate-300" />}
+        message="취소된 할일이 없습니다"
+        sub="취소 처리된 할일이 여기에 모입니다"
+      />
+    );
+  }
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-stretch gap-0">
-      {/* 드래그 핸들 */}
-      <div
-        {...listeners}
-        {...attributes}
-        className="flex items-center px-1.5 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors touch-none select-none"
-        title="드래그하여 순서 변경"
-      >
-        <GripVertical size={14} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <TaskCard task={task} onUpdate={onUpdate} />
-      </div>
+    <div className="space-y-5">
+      {grouped.map(({ dateStr, label, tasks: groupTasks }) => (
+        <div key={dateStr}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+              {label}
+            </span>
+            <span className="text-[11px] text-slate-400">{groupTasks.length}건 취소</span>
+            <div className="flex-1 h-px bg-slate-100" />
+          </div>
+          <div className="space-y-2">
+            {groupTasks.map((t) => (
+              <TaskCard key={t.id} task={t} onUpdate={onUpdate} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
