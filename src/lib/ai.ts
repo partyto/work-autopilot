@@ -14,8 +14,10 @@ function getClient(): Anthropic | null {
  */
 function stripMentions(text: string): string {
   return text
-    // @이름 (괄호 포함) 패턴 제거: "@주현우 (B2B서비스)", "@나", "@user" 등
-    .replace(/@[\w가-힣()·\s]+?(?=\s|님|$)/g, "")
+    // "@이름 (조직명)" 패턴 통째로 제거: "@주현우 (B2B서비스)", "@김응균 (KA사업)", "@나" 등
+    .replace(/@[\w가-힣]+\s*(\([^)]*\))?\s*/g, "")
+    // 남은 고아 괄호 조직명 제거: "(B2B서비스)", "(KA사업)" 등
+    .replace(/\([^)]{1,20}\)\s*/g, "")
     // "님" 호칭 제거
     .replace(/님\s*/g, "")
     // 연속 공백 정리
