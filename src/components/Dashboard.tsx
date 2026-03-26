@@ -932,7 +932,7 @@ function KanbanColumn({
         >
           {tasks.map((task) => (
             <motion.div key={task.id} variants={itemVariants}>
-              <TaskCard task={task} onUpdate={onUpdate} />
+              <TaskCard task={task} onUpdate={onUpdate} compact />
             </motion.div>
           ))}
         </motion.div>

@@ -43,6 +43,7 @@ interface TaskCardProps {
     links?: TaskLink[];
   };
   onUpdate: () => void;
+  compact?: boolean;
 }
 
 const STATUSES = ["pending", "in_progress", "in_qa", "done", "cancelled"] as const;
@@ -128,7 +129,7 @@ function getOriginDate(
   return { label: "생성", value: formatDateTime(createdAt) };
 }
 
-export default function TaskCard({ task, onUpdate }: TaskCardProps) {
+export default function TaskCard({ task, onUpdate, compact = false }: TaskCardProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -261,16 +262,17 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
         <div className={cn("w-full h-full cursor-pointer", pCfg.barColor)} onClick={() => setShowPriorityMenu(true)} title="우선순위 변경" />
       </div>
 
-      <div className="px-5 py-4 pl-6">
+      <div className={cn("pl-[18px]", compact ? "px-3 py-2.5" : "px-5 py-4")}>
         {/* Header */}
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
-              <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5", STATUS_DOT[task.status] || "bg-slate-400")} />
+            <div className={cn("flex items-center gap-2 flex-wrap", compact ? "mb-1" : "mb-1.5")}>
+              <div className={cn("rounded-full flex-shrink-0 mt-0.5", compact ? "w-2 h-2" : "w-2.5 h-2.5", STATUS_DOT[task.status] || "bg-slate-400")} />
 
               {SOURCE_BADGE[task.sourceType] && (
                 <span className={cn(
-                  "flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none tracking-wide",
+                  "flex-shrink-0 font-bold rounded-md leading-none tracking-wide",
+                  compact ? "text-[9px] px-1 py-0.5" : "text-[10px] px-1.5 py-0.5",
                   SOURCE_BADGE[task.sourceType].className
                 )}>
                   {SOURCE_BADGE[task.sourceType].label}
@@ -288,13 +290,17 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                     if (e.key === "Enter") handleTitleSave();
                     if (e.key === "Escape") { setEditingTitle(false); setTitleValue(task.title); }
                   }}
-                  className="flex-1 text-[15px] font-semibold text-slate-800 bg-blue-50 border border-blue-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
+                  className={cn(
+                    "flex-1 font-semibold text-slate-800 bg-blue-50 border border-blue-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-200 min-w-0",
+                    compact ? "text-[13px]" : "text-[15px]"
+                  )}
                 />
               ) : (
                 <h3
                   onClick={() => { if (!isDone) setEditingTitle(true); }}
                   className={cn(
-                    "text-[15px] font-semibold leading-snug truncate",
+                    "font-semibold leading-snug truncate",
+                    compact ? "text-[13px]" : "text-[15px]",
                     isDone ? "line-through text-slate-400" : "text-slate-800 cursor-text hover:text-blue-600 transition-colors"
                   )}
                   title="클릭해서 수정"
@@ -308,12 +314,13 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                 <button
                   onClick={() => setShowPriorityMenu(!showPriorityMenu)}
                   className={cn(
-                    "flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer",
+                    "flex items-center gap-1 font-semibold rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer",
+                    compact ? "text-[9px] px-1 py-0.5" : "text-[10px] px-1.5 py-0.5",
                     pCfg.badgeClass
                   )}
                   title="우선순위 변경"
                 >
-                  <Flag size={9} />
+                  <Flag size={compact ? 8 : 9} />
                   {pCfg.label}
                 </button>
                 {showPriorityMenu && (
@@ -337,8 +344,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
             </div>
 
             {/* 메타 정보 */}
-            <div className="flex items-center gap-3 ml-5 mt-1 flex-wrap">
-              {/* 기한 — 클릭해서 편집 */}
+            <div className={cn("flex items-center flex-wrap ml-4", compact ? "gap-2 mt-0.5" : "gap-3 mt-1")}>
               {editingDue ? (
                 <div className="flex items-center gap-1">
                   <input
@@ -367,17 +373,21 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                   )}
                   title="기한 설정"
                 >
-                  {isDue ? <AlertCircle size={10} /> : isDueToday ? <AlertCircle size={10} /> : <Calendar size={10} />}
-                  {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate}` : isDueToday ? `오늘 까지 ${task.dueDate}` : `마감 ${task.dueDate}`) : "기한 없음"}
+                  {isDue || isDueToday ? <AlertCircle size={10} /> : <Calendar size={10} />}
+                  {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate.slice(0,10)}` : isDueToday ? `오늘 ${task.dueDate.slice(0,10)}` : `마감 ${task.dueDate.slice(0,10)}`) : "기한 없음"}
                 </button>
               )}
 
-              {(() => {
+              {!compact && (() => {
                 const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
                 return <span className="text-[11px] text-slate-400">{label} {value}</span>;
               })()}
+              {compact && (() => {
+                const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
+                return <span className="text-[10px] text-slate-400">{value.slice(5, 16)}</span>;
+              })()}
               {task.completedAt && (
-                <span className="text-[11px] text-emerald-600">완료 {formatDateTime(task.completedAt)}</span>
+                <span className={cn("text-emerald-600", compact ? "text-[10px]" : "text-[11px]")}>완료 {formatDateTime(task.completedAt)}</span>
               )}
               {hasNoLinks && (
                 <span className="flex items-center gap-1 text-[11px] text-slate-400">
@@ -392,16 +402,16 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
             {task.description && task.sourceType !== "slack_detected" && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
               >
-                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
             )}
             <button
               onClick={handleDelete}
-              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
             >
-              <Trash2 size={14} />
+              <Trash2 size={13} />
             </button>
           </div>
         </div>
@@ -409,10 +419,10 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
         {/* Slack 카드 본문 — 항상 1줄 미리보기, 클릭으로 펼치기 */}
         {task.sourceType === "slack_detected" && task.description && (
           <div
-            className="flex items-start gap-1.5 ml-5 mt-2 cursor-pointer group/desc"
+            className="flex items-start gap-1.5 ml-4 mt-1.5 cursor-pointer group/desc"
             onClick={() => setExpanded(!expanded)}
           >
-            <MessageSquare size={11} className="flex-shrink-0 mt-0.5 text-slate-300" />
+            <MessageSquare size={10} className="flex-shrink-0 mt-0.5 text-slate-300" />
             <p className={cn(
               "flex-1 text-[11px] text-slate-400 leading-relaxed min-w-0 transition-all",
               expanded ? "whitespace-pre-wrap break-words" : "truncate"
@@ -420,7 +430,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
               {task.description}
             </p>
             <span className="flex-shrink-0 mt-0.5 text-slate-300 group-hover/desc:text-slate-500 transition-colors">
-              {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+              {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
             </span>
           </div>
         )}
@@ -431,22 +441,24 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="text-xs text-slate-500 ml-5 mt-2 leading-relaxed"
+            className="text-xs text-slate-500 ml-4 mt-2 leading-relaxed"
           >
             {task.description}
           </motion.p>
         )}
 
         {/* 상태 버튼 + 링크 */}
-        <div className="flex items-center justify-between mt-4 ml-5 gap-2">
-          <div className="flex gap-1 bg-slate-50 rounded-lg p-0.5 border border-slate-100">
+        <div className={cn("flex flex-col gap-1.5 ml-4", compact ? "mt-2.5" : "mt-4")}>
+          {/* 상태 버튼 */}
+          <div className="flex gap-0.5 bg-slate-50 rounded-lg p-0.5 border border-slate-100 w-full">
             {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
               <button
                 key={s}
                 onClick={() => handleStatusChange(s)}
                 disabled={isUpdating}
                 className={cn(
-                  "px-3 py-1.5 text-xs rounded-md font-medium transition-all cursor-pointer",
+                  "flex-1 rounded-md font-medium transition-all cursor-pointer text-center",
+                  compact ? "px-1 py-1 text-[10px]" : "px-2.5 py-1.5 text-xs",
                   task.status === s
                     ? cn(STATUS_COLORS[s], "text-white shadow-sm")
                     : "text-slate-500 hover:text-slate-700 hover:bg-white"
@@ -457,33 +469,42 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
-            {jiraLink && (
-              <a
-                href={jiraLink.jiraIssueUrl || "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-xs rounded-lg shadow-sm transition-colors"
-              >
-                <span className="w-3.5 h-3.5 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white">J</span>
-                {jiraLink.jiraIssueKey}
-                {jiraLink.jiraStatus && <span className="text-blue-400">· {jiraLink.jiraStatus}</span>}
-                <ExternalLink size={10} className="opacity-50" />
-              </a>
-            )}
-            {slackLink && (
-              <a
-                href={slackLink.slackThreadUrl || "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600 text-xs rounded-lg shadow-sm transition-colors"
-              >
-                <MessageSquare size={10} />
-                Slack
-                <ExternalLink size={10} className="opacity-50" />
-              </a>
-            )}
-          </div>
+          {/* Jira / Slack 링크 */}
+          {(jiraLink || slackLink) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {jiraLink && (
+                <a
+                  href={jiraLink.jiraIssueUrl || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-lg shadow-sm transition-colors min-w-0 max-w-full",
+                    compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
+                  )}
+                >
+                  <span className="w-3 h-3 rounded bg-blue-600 flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0">J</span>
+                  <span className="truncate max-w-[100px]">{jiraLink.jiraIssueKey}</span>
+                  {jiraLink.jiraStatus && <span className="text-blue-400 truncate max-w-[70px] flex-shrink-0">· {jiraLink.jiraStatus}</span>}
+                  <ExternalLink size={9} className="opacity-50 flex-shrink-0" />
+                </a>
+              )}
+              {slackLink && (
+                <a
+                  href={slackLink.slackThreadUrl || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600 rounded-lg shadow-sm transition-colors flex-shrink-0",
+                    compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
+                  )}
+                >
+                  <MessageSquare size={9} />
+                  Slack
+                  <ExternalLink size={9} className="opacity-50" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
