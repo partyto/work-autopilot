@@ -421,7 +421,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
         {/* 상태 버튼 + 링크 */}
         <div className="flex items-center justify-between mt-4 ml-5 gap-2">
           <div className="flex gap-1 bg-slate-50 rounded-lg p-0.5 border border-slate-100">
-            {STATUSES.map((s) => (
+            {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
               <button
                 key={s}
                 onClick={() => handleStatusChange(s)}
