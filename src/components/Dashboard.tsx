@@ -100,9 +100,9 @@ const ACTION_FILTER_TABS = [
 ] as const;
 
 const SOURCE_FILTERS = [
-  { key: "jira_sync", label: "JIRA", color: "text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100", activeColor: "bg-blue-600 text-white border-blue-600" },
-  { key: "slack_detected", label: "SLACK", color: "text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100", activeColor: "bg-purple-600 text-white border-purple-600" },
-  { key: "manual", label: "SELF", color: "text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100", activeColor: "bg-emerald-600 text-white border-emerald-600" },
+  { key: "jira_sync", label: "JIRA", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-blue-600 text-white border-blue-600" },
+  { key: "slack_detected", label: "SLACK", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-slate-700 text-white border-slate-700" },
+  { key: "manual", label: "SELF", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-slate-500 text-white border-slate-500" },
 ] as const;
 
 // 모듈 스코프 상수 (렌더링마다 재생성 방지)
@@ -332,65 +332,62 @@ export default function Dashboard() {
       </div>
 
       {/* KPI 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        <KpiCard icon={<Clock size={15} />} label="대기" value={stats.pending}
-          iconClass="bg-slate-100 text-slate-500" activeIconClass="bg-slate-600 text-white"
-          valueClass="text-slate-700" activeBorderClass="border-slate-400"
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+        <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending}
+          activeIconClass="bg-slate-700 text-white"
+          activeValueClass="text-slate-700" activeBorderClass="border-slate-400"
           active={kpiFilters.has("pending")} onClick={() => handleKpiClick("pending")} />
-        <KpiCard icon={<CircleDot size={15} />} label="진행 중" value={stats.inProgress}
-          iconClass="bg-blue-50 text-blue-500" activeIconClass="bg-blue-500 text-white"
-          valueClass="text-blue-600" activeBorderClass="border-blue-400"
+        <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress}
+          activeIconClass="bg-blue-500 text-white"
+          activeValueClass="text-blue-600" activeBorderClass="border-blue-400"
           active={kpiFilters.has("in_progress")} onClick={() => handleKpiClick("in_progress")} />
-        <KpiCard icon={<CheckCircle2 size={15} />} label="완료" value={stats.done}
-          iconClass="bg-emerald-50 text-emerald-500" activeIconClass="bg-emerald-500 text-white"
-          valueClass="text-emerald-600" activeBorderClass="border-emerald-400"
+        <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done}
+          activeIconClass="bg-emerald-500 text-white"
+          activeValueClass="text-emerald-600" activeBorderClass="border-emerald-400"
           active={kpiFilters.has("done")} onClick={() => handleKpiClick("done")} />
-        <KpiCard icon={<CalendarDays size={15} />} label="오늘 까지" value={stats.dueToday}
-          iconClass="bg-orange-50 text-orange-500" activeIconClass="bg-orange-500 text-white"
-          valueClass="text-orange-600" activeBorderClass="border-orange-400"
+        <KpiCard icon={<CalendarDays size={14} />} label="오늘 까지" value={stats.dueToday}
+          activeIconClass="bg-orange-500 text-white"
+          activeValueClass="text-orange-600" activeBorderClass="border-orange-400"
           alert={stats.dueToday > 0}
           active={kpiFilters.has("dueToday")} onClick={() => handleKpiClick("dueToday")} />
-        <KpiCard icon={<AlertTriangle size={15} />} label="기한 초과" value={stats.overdue}
-          iconClass="bg-red-50 text-red-500" activeIconClass="bg-red-500 text-white"
-          valueClass="text-red-600" activeBorderClass="border-red-400"
+        <KpiCard icon={<AlertTriangle size={14} />} label="기한 초과" value={stats.overdue}
+          activeIconClass="bg-red-500 text-white"
+          activeValueClass="text-red-600" activeBorderClass="border-red-400"
           alert={stats.overdue > 0}
           active={kpiFilters.has("overdue")} onClick={() => handleKpiClick("overdue")} />
-        <KpiCard icon={<Link2Off size={15} />} label="연결 없음" value={stats.noLink}
-          iconClass="bg-yellow-50 text-yellow-600" activeIconClass="bg-yellow-500 text-white"
-          valueClass="text-yellow-600" activeBorderClass="border-yellow-400"
+        <KpiCard icon={<Link2Off size={14} />} label="연결 없음" value={stats.noLink}
+          activeIconClass="bg-slate-500 text-white"
+          activeValueClass="text-slate-600" activeBorderClass="border-slate-400"
           active={kpiFilters.has("noLink")} onClick={() => handleKpiClick("noLink")} />
-        <KpiCard icon={<Bell size={15} />} label="승인 대기" value={stats.pendingActions}
-          iconClass="bg-amber-50 text-amber-500" activeIconClass="bg-amber-500 text-white"
-          valueClass="text-amber-600" activeBorderClass="border-amber-400"
+        <KpiCard icon={<Bell size={14} />} label="승인 대기" value={stats.pendingActions}
+          activeIconClass="bg-amber-500 text-white"
+          activeValueClass="text-amber-600" activeBorderClass="border-amber-400"
           alert={stats.pendingActions > 0}
           onClick={() => { setKpiFilters(new Set()); setActiveSection("actions"); }} />
       </div>
 
       {/* 섹션 탭 */}
-      <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-2xl p-1 w-fit shadow-sm">
+      <div className="flex items-center gap-1">
         <SectionTab
           active={activeSection === "tasks"}
           onClick={() => setActiveSection("tasks")}
-          icon={<ListTodo size={14} />}
+          icon={<ListTodo size={13} />}
           label="TO-DO"
           count={tasks.length}
-          activeColor="text-blue-600 border-blue-600"
         />
         <SectionTab
           active={activeSection === "actions"}
           onClick={() => setActiveSection("actions")}
-          icon={<Bot size={14} />}
+          icon={<Bot size={13} />}
           label="자동 액션"
           count={stats.pendingActions > 0 ? stats.pendingActions : undefined}
           badge={stats.pendingActions > 0}
-          activeColor="text-amber-600 border-amber-600"
         />
         <SectionTab
           active={activeSection === "history"}
           onClick={() => setActiveSection("history")}
-          icon={<History size={14} />}
+          icon={<History size={13} />}
           label="스캔 이력"
-          activeColor="text-purple-600 border-purple-600"
         />
       </div>
 
@@ -632,15 +629,14 @@ export default function Dashboard() {
 
 function KpiCard({
   icon, label, value,
-  iconClass, activeIconClass, valueClass, activeBorderClass,
+  activeIconClass, activeValueClass, activeBorderClass,
   alert, active, onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
-  iconClass: string;
   activeIconClass: string;
-  valueClass: string;
+  activeValueClass: string;
   activeBorderClass: string;
   alert?: boolean;
   active?: boolean;
@@ -648,31 +644,35 @@ function KpiCard({
 }) {
   return (
     <motion.div
-      whileHover={{ y: -2, transition: { duration: 0.15 } }}
-      whileTap={{ scale: 0.97 }}
+      whileHover={{ y: -1, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } }}
+      whileTap={{ scale: 0.98 }}
       onClick={onClick}
       className={cn(
-        "relative bg-white rounded-2xl p-4 cursor-pointer transition-all duration-200",
+        "relative bg-white rounded-2xl p-3.5 cursor-pointer transition-all",
+        "border shadow-sm",
         active
           ? `border-2 ${activeBorderClass} shadow-md`
-          : "border border-slate-100 shadow-sm hover:border-slate-200 hover:shadow-[var(--shadow-card-hover)]"
+          : "border-slate-100 hover:border-slate-200 hover:shadow-[var(--shadow-card-hover)]"
       )}
+      style={{ transition: `box-shadow 0.3s var(--spring), border-color 0.3s var(--spring)` }}
     >
       <div className={cn(
-        "w-8 h-8 rounded-xl flex items-center justify-center mb-3 transition-all",
-        active ? activeIconClass : iconClass
+        "w-7 h-7 rounded-lg flex items-center justify-center mb-2.5 transition-all",
+        active ? activeIconClass : "bg-slate-100 text-slate-400"
       )}>
         {icon}
       </div>
       <div className={cn(
-        "text-3xl font-bold tracking-tight leading-none",
-        value > 0 ? valueClass : "text-slate-200"
+        "text-2xl font-bold tracking-tight leading-none",
+        active
+          ? (value > 0 ? activeValueClass : "text-slate-200")
+          : (value > 0 ? "text-slate-700" : "text-slate-200")
       )}>
         {value}
       </div>
-      <div className="text-[11px] font-medium text-slate-400 mt-1.5 tracking-wide">{label}</div>
+      <div className="text-[10px] font-medium text-slate-400 mt-1.5 tracking-wide">{label}</div>
       {alert && value > 0 && !active && (
-        <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-amber-400 animate-soft-pulse" />
+        <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-amber-400 animate-soft-pulse" />
       )}
     </motion.div>
   );
@@ -691,7 +691,7 @@ function ConnStatus({ label, connected }: { label: string; connected?: boolean }
 }
 
 function SectionTab({
-  active, onClick, icon, label, count, badge, activeColor,
+  active, onClick, icon, label, count, badge,
 }: {
   active: boolean;
   onClick: () => void;
@@ -699,27 +699,28 @@ function SectionTab({
   label: string;
   count?: number;
   badge?: boolean;
-  activeColor: string;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all rounded-xl cursor-pointer",
+        "flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium rounded-xl cursor-pointer transition-all",
+        "duration-200",
         active
-          ? `${activeColor} bg-slate-50 shadow-sm border border-slate-100`
-          : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+          ? "bg-slate-900 text-white shadow-sm"
+          : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
       )}
+      style={{ transition: `background 0.2s var(--spring), color 0.2s var(--spring)` }}
     >
       {icon}
       {label}
       {count !== undefined && (
         badge ? (
-          <span className="text-[11px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full leading-none font-bold">
+          <span className="text-[10px] bg-amber-400 text-white px-1.5 py-0.5 rounded-full leading-none font-bold">
             {count}
           </span>
         ) : (
-          <span className="text-xs text-slate-400 font-normal">{count}</span>
+          <span className="text-[11px] text-slate-400 font-normal ml-0.5">{count}</span>
         )
       )}
     </button>

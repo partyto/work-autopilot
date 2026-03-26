@@ -20,8 +20,8 @@ export default function RootLayout({
             <div className="flex items-center gap-3">
               <img src="/icon-192.png" alt="Work Pavlotrasche" className="w-9 h-9 rounded-xl shadow-md" />
               <div>
-                <h1 className="text-lg font-bold gradient-text leading-none">Work Pavlotrasche</h1>
-                <p className="text-xs text-slate-500 mt-0.5 tracking-wide">업무 자동화 대시보드</p>
+                <h1 className="text-[15px] font-bold text-slate-900 leading-none tracking-tight">Work Pavlotrasche</h1>
+                <p className="text-[11px] text-slate-400 mt-0.5">업무 자동화 대시보드</p>
               </div>
             </div>
             <div className="flex items-center gap-2.5 bg-[var(--surface2)] rounded-full px-3 py-1.5">

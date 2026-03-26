@@ -81,15 +81,15 @@ const PRIORITIES = ["high", "medium", "low"] as const;
 const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
   slack_detected: {
     label: "SLACK",
-    className: "bg-purple-100 text-purple-700 border border-purple-200",
+    className: "bg-slate-100 text-slate-600 border border-slate-200",
   },
   jira_sync: {
     label: "JIRA",
-    className: "bg-blue-100 text-blue-700 border border-blue-200",
+    className: "bg-blue-50 text-blue-600 border border-blue-200",
   },
   manual: {
     label: "SELF",
-    className: "bg-slate-100 text-slate-600 border border-slate-200",
+    className: "bg-slate-100 text-slate-500 border border-slate-200",
   },
 };
 
@@ -253,7 +253,7 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
           ? "border-orange-300 shadow-orange-50"
           : isDueSoon
           ? "border-amber-300"
-          : "border-[var(--border2)] hover:border-blue-300 hover:shadow-[var(--shadow-card-hover)]"
+          : "border-[var(--border2)] hover:border-slate-300 hover:shadow-[var(--shadow-card-hover)]"
       )}
     >
       {/* 왼쪽 우선순위 바 — 클릭해서 우선순위 변경 */}
