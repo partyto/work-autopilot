@@ -9,12 +9,24 @@ function getClient(): Anthropic | null {
 }
 
 /**
- * Slack 메시지 전체 본문을 20자 이내 할일 제목으로 요약.
- * API Key 없거나 실패 시 앞 20자로 fallback.
+ * @멘션, 이름 호칭 패턴을 제거한 뒤 LLM으로 20자 이내 할일 제목 생성.
+ * API Key 없거나 실패 시 전처리된 텍스트 앞 20자로 fallback.
  */
+function stripMentions(text: string): string {
+  return text
+    // @이름 (괄호 포함) 패턴 제거: "@주현우 (B2B서비스)", "@나", "@user" 등
+    .replace(/@[\w가-힣()·\s]+?(?=\s|님|$)/g, "")
+    // "님" 호칭 제거
+    .replace(/님\s*/g, "")
+    // 연속 공백 정리
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export async function summarizeSlackTitle(text: string): Promise<string> {
+  const cleaned = stripMentions(text);
   const ai = getClient();
-  if (!ai) return text.substring(0, 20);
+  if (!ai) return cleaned.substring(0, 20);
 
   try {
     const msg = await ai.messages.create({
@@ -22,13 +34,13 @@ export async function summarizeSlackTitle(text: string): Promise<string> {
       max_tokens: 64,
       messages: [{
         role: "user",
-        content: `다음 Slack 메시지를 할일 제목으로 20자 이내 한국어로 요약해. 사람 이름(@멘션 포함)은 제목에 넣지 마. 동사형으로 끝내. 따옴표 없이 제목만 출력:\n${text}`,
+        content: `다음 Slack 메시지를 할일 제목으로 20자 이내 한국어로 요약해. 사람 이름은 절대 포함하지 마. 동사형으로 끝내. 따옴표 없이 제목만 출력:\n${cleaned}`,
       }],
     });
     const result = (msg.content[0] as { type: string; text: string }).text.trim();
     return result.substring(0, 20);
   } catch (err) {
     console.warn("[AI] summarizeSlackTitle failed, using fallback:", err);
-    return text.substring(0, 20);
+    return cleaned.substring(0, 20);
   }
 }
