@@ -122,7 +122,7 @@ export async function PATCH(
       const slackLink = links.find((l) => l.linkType === "slack_thread");
       if (slackLink?.slackChannelId && slackLink?.slackThreadTs) {
         const emoji =
-          body.status === "done" ? "white_check_mark"
+          body.status === "done" ? "완료_"
           : body.status === "in_progress" || body.status === "in_qa" ? "확인중2"
           : null;
         if (emoji) {
