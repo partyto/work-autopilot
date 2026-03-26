@@ -22,7 +22,7 @@ export async function summarizeSlackTitle(text: string): Promise<string> {
       max_tokens: 64,
       messages: [{
         role: "user",
-        content: `다음 Slack 메시지를 할일 제목으로 20자 이내 한국어로 요약해. 동사형으로 끝내. 따옴표 없이 제목만 출력:\n${text}`,
+        content: `다음 Slack 메시지를 할일 제목으로 20자 이내 한국어로 요약해. 사람 이름(@멘션 포함)은 제목에 넣지 마. 동사형으로 끝내. 따옴표 없이 제목만 출력:\n${text}`,
       }],
     });
     const result = (msg.content[0] as { type: string; text: string }).text.trim();
