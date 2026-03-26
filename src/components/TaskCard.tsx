@@ -213,17 +213,25 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
     }
   };
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isDueToday =
+    task.dueDate &&
+    task.status !== "done" &&
+    task.status !== "cancelled" &&
+    task.dueDate.slice(0, 10) === todayStr;
+
   const isDue =
     task.dueDate &&
     task.status !== "done" &&
     task.status !== "cancelled" &&
-    new Date(task.dueDate) < new Date();
+    task.dueDate.slice(0, 10) < todayStr;
 
   const isDueSoon =
     task.dueDate &&
     task.status !== "done" &&
     task.status !== "cancelled" &&
     !isDue &&
+    !isDueToday &&
     new Date(task.dueDate) <= new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
   const jiraLink = task.links?.find((l) => l.linkType === "jira");
@@ -241,6 +249,8 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
           ? "border-[var(--border)] opacity-60"
           : isDue
           ? "border-red-300 shadow-red-100"
+          : isDueToday
+          ? "border-orange-300 shadow-orange-50"
           : isDueSoon
           ? "border-amber-300"
           : "border-[var(--border2)] hover:border-blue-300 hover:shadow-[var(--shadow-card-hover)]"
@@ -353,12 +363,12 @@ export default function TaskCard({ task, onUpdate }: TaskCardProps) {
                   onClick={() => setEditingDue(true)}
                   className={cn(
                     "flex items-center gap-1 text-[11px] rounded-md px-1.5 py-0.5 transition-all hover:bg-slate-100 cursor-pointer",
-                    isDue ? "text-red-500 font-medium" : isDueSoon ? "text-amber-500" : "text-slate-400 hover:text-slate-600"
+                    isDue ? "text-red-500 font-medium" : isDueToday ? "text-orange-500 font-medium" : isDueSoon ? "text-amber-500" : "text-slate-400 hover:text-slate-600"
                   )}
                   title="기한 설정"
                 >
-                  {isDue ? <AlertCircle size={10} /> : <Calendar size={10} />}
-                  {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate}` : `마감 ${task.dueDate}`) : "기한 없음"}
+                  {isDue ? <AlertCircle size={10} /> : isDueToday ? <AlertCircle size={10} /> : <Calendar size={10} />}
+                  {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate}` : isDueToday ? `오늘 까지 ${task.dueDate}` : `마감 ${task.dueDate}`) : "기한 없음"}
                 </button>
               )}
 

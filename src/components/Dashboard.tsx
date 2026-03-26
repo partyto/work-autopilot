@@ -105,11 +105,14 @@ const SOURCE_FILTERS = [
 ] as const;
 
 // 모듈 스코프 상수 (렌더링마다 재생성 방지)
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
 const KPI_FILTERS: Record<string, (t: TaskWithLinks) => boolean> = {
   pending: (t) => t.status === "pending",
   in_progress: (t) => t.status === "in_progress" || t.status === "in_qa",
   done: (t) => t.status === "done",
-  overdue: (t) => !!t.dueDate && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date(),
+  dueToday: (t) => !!t.dueDate && t.status !== "done" && t.status !== "cancelled" && t.dueDate.slice(0, 10) === todayStr(),
+  overdue: (t) => !!t.dueDate && t.status !== "done" && t.status !== "cancelled" && t.dueDate.slice(0, 10) < todayStr(),
   noLink: (t) => !t.links || t.links.length === 0,
 };
 
@@ -290,8 +293,11 @@ export default function Dashboard() {
     pending: tasks.filter((t) => t.status === "pending").length,
     inProgress: tasks.filter((t) => t.status === "in_progress" || t.status === "in_qa").length,
     done: tasks.filter((t) => t.status === "done").length,
+    dueToday: tasks.filter(
+      (t) => t.dueDate && t.status !== "done" && t.status !== "cancelled" && t.dueDate.slice(0, 10) === todayStr()
+    ).length,
     overdue: tasks.filter(
-      (t) => t.dueDate && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date()
+      (t) => t.dueDate && t.status !== "done" && t.status !== "cancelled" && t.dueDate.slice(0, 10) < todayStr()
     ).length,
     noLink: tasks.filter((t) => !t.links || t.links.length === 0).length,
     pendingActions: actions.filter((a) => a.status === "proposed").length,
@@ -323,10 +329,20 @@ export default function Dashboard() {
       </div>
 
       {/* KPI 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
         <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending} color="text-slate-600" borderColor="border-slate-200" active={kpiFilters.has("pending")} onClick={() => handleKpiClick("pending")} />
         <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress} color="text-blue-600" borderColor="border-blue-200" active={kpiFilters.has("in_progress")} onClick={() => handleKpiClick("in_progress")} />
         <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done} color="text-emerald-600" borderColor="border-emerald-200" active={kpiFilters.has("done")} onClick={() => handleKpiClick("done")} />
+        <KpiCard
+          icon={<CalendarDays size={14} />}
+          label="오늘 까지"
+          value={stats.dueToday}
+          color={stats.dueToday > 0 ? "text-orange-600" : "text-slate-400"}
+          borderColor={stats.dueToday > 0 ? "border-orange-200" : "border-slate-200"}
+          alert={stats.dueToday > 0}
+          active={kpiFilters.has("dueToday")}
+          onClick={() => handleKpiClick("dueToday")}
+        />
         <KpiCard
           icon={<AlertTriangle size={14} />}
           label="기한 초과"
@@ -430,7 +446,7 @@ export default function Dashboard() {
             {kpiFilters.size > 0 && (
               <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700 flex-wrap">
                 {Array.from(kpiFilters).map((k) => {
-                  const label = { pending: "대기", in_progress: "진행 중", done: "완료", overdue: "기한 초과", noLink: "연결 없음" }[k];
+                  const label = { pending: "대기", in_progress: "진행 중", done: "완료", dueToday: "오늘 까지", overdue: "기한 초과", noLink: "연결 없음" }[k];
                   return (
                     <span key={k} className="flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded-lg text-xs font-medium">
                       {label}
