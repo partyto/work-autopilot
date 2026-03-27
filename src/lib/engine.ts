@@ -1,6 +1,6 @@
 // Work Autopilot 핵심 엔진 — Jira/Slack 스캔 + 리포트 + 액션 실행
 import { db, schema } from "@/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { summarizeSlackTitle } from "@/lib/ai";
 import { generateId, nowLocal, todayDate } from "@/lib/utils";
 import * as jira from "@/lib/integrations/jira";
@@ -529,26 +529,36 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
     const isAligned = expectedTodo === task.status || jiraLevelCheck === todoLevelCheck;
 
     // 기존 proposed 액션 조회
-    const existingAction = await db.query.actions.findFirst({
+    const existingProposed = await db.query.actions.findFirst({
       where: and(
         eq(schema.actions.taskId, task.id),
         eq(schema.actions.status, "proposed" as ActionStatus),
       ),
     });
 
+    // 거절된 상태 동기화 액션이 있는지 확인 (같은 Jira 이슈 + 같은 방향이면 재제안 안 함)
+    const existingRejected = await db.query.actions.findFirst({
+      where: and(
+        eq(schema.actions.taskId, task.id),
+        eq(schema.actions.status, "rejected" as ActionStatus),
+        inArray(schema.actions.actionType, ["todo_status_change", "jira_transition"] as ActionType[]),
+      ),
+    });
+
     if (isAligned) {
       // 상태 일치 → 기존 proposed 액션 자동 취소
-      if (existingAction) {
+      if (existingProposed) {
         await db.update(schema.actions)
           .set({ status: "cancelled" as ActionStatus })
-          .where(eq(schema.actions.id, existingAction.id));
-        console.log(`[Engine] 상태 일치 → 액션 자동 취소: ${existingAction.description}`);
+          .where(eq(schema.actions.id, existingProposed.id));
+        console.log(`[Engine] 상태 일치 → 액션 자동 취소: ${existingProposed.description}`);
       }
       continue;
     }
 
     // 불일치 존재 — 방향 판단: 나중에 바뀐 쪽이 기준
-    if (existingAction) continue; // 이미 proposed 액션이 있으면 중복 방지
+    if (existingProposed) continue; // 이미 proposed 액션이 있으면 중복 방지
+    if (existingRejected) continue; // 이미 거절된 동기화 액션이 있으면 재제안 안 함
 
     // 우선순위 기반 방향 결정: 더 앞선 상태가 기준
     const jiraLevel = jiraStatusLevel(jiraStatus);
