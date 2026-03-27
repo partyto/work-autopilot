@@ -279,19 +279,27 @@ export default function Dashboard() {
     applyColumnFilters(tasks.filter((t) => t.status === "in_progress" || t.status === "in_qa")),
   [tasks, applyColumnFilters]);
 
-  // 오늘 완료된 태스크는 항상 칸반에 표시 (EOD 전송 여부 무관)
+  // 마무리(EOD) 전송 전: 오늘 완료한 것 표시 / 전송 후: 전송 이후 완료한 것만 표시
   const kanbanDone = useMemo(() => {
+    const lastEodAt = workflowStatus?.lastEod?.createdAt;
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayIso = todayStart.toISOString();
+    // 오늘 EOD를 보냈는지 여부
+    const eodSentToday = lastEodAt ? lastEodAt >= todayIso : false;
 
     const base = tasks.filter((t) => {
       if (t.status !== "done") return false;
       const completedAt = t.completedAt ?? t.createdAt;
-      return completedAt >= todayIso; // 오늘 완료된 것만
+      if (eodSentToday) {
+        // 오늘 마무리 이후에 완료한 것만
+        return completedAt > lastEodAt!;
+      }
+      // 마무리 전이면 오늘 완료한 것 전부
+      return completedAt >= todayIso;
     });
     return applyColumnFilters(base);
-  }, [tasks, applyColumnFilters]);
+  }, [tasks, applyColumnFilters, workflowStatus]);
 
   const handleKpiClick = (key: string) => {
     setKpiFilters((prev) => {
