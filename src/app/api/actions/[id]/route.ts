@@ -46,14 +46,15 @@ export async function PATCH(
       }
     }
 
-    // 거절 시: todo_create placeholder task 삭제
+    // 거절 시: todo_create placeholder task를 cancelled로 변경 (삭제 시 CASCADE로 action도 삭제되어 재스캔 시 중복 생성되는 문제 방지)
     if (body.status === "rejected") {
       const action = await db.query.actions.findFirst({
         where: eq(schema.actions.id, id),
         columns: { actionType: true, taskId: true },
       });
       if (action?.actionType === "todo_create") {
-        await db.delete(schema.tasks).where(eq(schema.tasks.id, action.taskId));
+        await db.update(schema.tasks).set({ status: "cancelled", updatedAt: now })
+          .where(eq(schema.tasks.id, action.taskId));
       }
     }
 
