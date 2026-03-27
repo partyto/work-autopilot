@@ -1,6 +1,6 @@
 // Work Autopilot 핵심 엔진 — Jira/Slack 스캔 + 리포트 + 액션 실행
 import { db, schema } from "@/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { summarizeSlackTitle } from "@/lib/ai";
 import { generateId, nowLocal, todayDate } from "@/lib/utils";
 import * as jira from "@/lib/integrations/jira";
@@ -528,37 +528,30 @@ async function syncJiraStatuses(issues: jira.JiraIssue[]): Promise<string[]> {
     // 레벨이 같으면 aligned (예: Jira IN QA=lv2, TODO in_qa=lv2)
     const isAligned = expectedTodo === task.status || jiraLevelCheck === todoLevelCheck;
 
-    // 기존 proposed 액션 조회
-    const existingProposed = await db.query.actions.findFirst({
+    // 이 태스크에 proposed 또는 rejected 상태 동기화 액션이 있는지 확인
+    const existingAction = await db.query.actions.findFirst({
       where: and(
         eq(schema.actions.taskId, task.id),
-        eq(schema.actions.status, "proposed" as ActionStatus),
-      ),
-    });
-
-    // 거절된 상태 동기화 액션이 있는지 확인 (같은 Jira 이슈 + 같은 방향이면 재제안 안 함)
-    const existingRejected = await db.query.actions.findFirst({
-      where: and(
-        eq(schema.actions.taskId, task.id),
-        eq(schema.actions.status, "rejected" as ActionStatus),
-        inArray(schema.actions.actionType, ["todo_status_change", "jira_transition"] as ActionType[]),
+        or(
+          eq(schema.actions.status, "proposed" as ActionStatus),
+          eq(schema.actions.status, "rejected" as ActionStatus),
+        ),
       ),
     });
 
     if (isAligned) {
       // 상태 일치 → 기존 proposed 액션 자동 취소
-      if (existingProposed) {
+      if (existingAction && existingAction.status === "proposed") {
         await db.update(schema.actions)
           .set({ status: "cancelled" as ActionStatus })
-          .where(eq(schema.actions.id, existingProposed.id));
-        console.log(`[Engine] 상태 일치 → 액션 자동 취소: ${existingProposed.description}`);
+          .where(eq(schema.actions.id, existingAction.id));
+        console.log(`[Engine] 상태 일치 → 액션 자동 취소: ${existingAction.description}`);
       }
       continue;
     }
 
-    // 불일치 존재 — 방향 판단: 나중에 바뀐 쪽이 기준
-    if (existingProposed) continue; // 이미 proposed 액션이 있으면 중복 방지
-    if (existingRejected) continue; // 이미 거절된 동기화 액션이 있으면 재제안 안 함
+    // 이미 proposed 또는 rejected 액션이 있으면 재제안 안 함
+    if (existingAction) continue;
 
     // 우선순위 기반 방향 결정: 더 앞선 상태가 기준
     const jiraLevel = jiraStatusLevel(jiraStatus);
