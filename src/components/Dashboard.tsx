@@ -91,9 +91,9 @@ const ACTION_FILTER_TABS = [
 ] as const;
 
 const SOURCE_FILTERS = [
-  { key: "jira_sync", label: "JIRA", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-indigo-50 hover:border-indigo-200", activeColor: "bg-indigo-600 text-white border-indigo-600" },
-  { key: "slack_detected", label: "SLACK", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-green-50 hover:border-green-200", activeColor: "bg-green-600 text-white border-green-600" },
-  { key: "manual", label: "SELF", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-slate-600 text-white border-slate-600" },
+  { key: "jira_sync",      label: "JIRA",  color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-[var(--accent-glow)] hover:border-[var(--accent-border)]", activeColor: "bg-[var(--accent)] text-white border-[var(--accent)]" },
+  { key: "slack_detected", label: "SLACK", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-[var(--accent-glow)] hover:border-[var(--accent-border)]", activeColor: "bg-[var(--accent)] text-white border-[var(--accent)]" },
+  { key: "manual",         label: "SELF",  color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-[var(--accent-glow)] hover:border-[var(--accent-border)]", activeColor: "bg-[var(--accent)] text-white border-[var(--accent)]" },
 ] as const;
 
 // 모듈 스코프 상수 (렌더링마다 재생성 방지)
@@ -137,7 +137,7 @@ export default function Dashboard() {
   const [actions, setActions] = useState<ActionWithTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeActionTab, setActiveActionTab] = useState<string>("proposed");
-  const [activeSection, setActiveSection] = useState<"tasks" | "actions" | "history" | "completed" | "cancelled">("tasks");
+  const [activeHash, setActiveHash] = useState<string>("");
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [reports, setReports] = useState<DailyReport[]>([]);
@@ -148,6 +148,7 @@ export default function Dashboard() {
   const [workflowRunning, setWorkflowRunning] = useState<"eod" | "sod" | null>(null);
   const [sodModalOpen, setSodModalOpen] = useState(false);
   const [eodModalOpen, setEodModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -209,6 +210,17 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchWorkflowStatus]);
 
+  // hash → 뷰 라우팅 (LNB 연동)
+  useEffect(() => {
+    const update = () => {
+      const h = window.location.hash.replace("#", "");
+      setActiveHash(h);
+    };
+    update();
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
+
   useEffect(() => {
     Promise.all([fetchTasks(), fetchActions(), fetchScanStatus(), fetchReports(), fetchWorkflowStatus()]);
   }, [fetchTasks, fetchActions, fetchScanStatus, fetchReports, fetchWorkflowStatus]);
@@ -227,7 +239,7 @@ export default function Dashboard() {
         toast.success("스캔 완료!", { id: toastId });
         if (data.scanItems?.length > 0) {
           setLastScanItems(data.scanItems);
-          setActiveSection("history");
+          window.location.hash = "history";
         }
         handleRefreshAll();
       } else {
@@ -242,6 +254,14 @@ export default function Dashboard() {
 
   const applyColumnFilters = useCallback((base: TaskWithLinks[]) => {
     let result = base;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(
+        (t) =>
+          t.title.toLowerCase().includes(q) ||
+          (t.description ?? "").toLowerCase().includes(q)
+      );
+    }
     if (kpiFilters.size > 0) {
       result = result.filter((t) => Array.from(kpiFilters).some((k) => (KPI_FILTERS[k] ?? (() => false))(t)));
     }
@@ -249,7 +269,7 @@ export default function Dashboard() {
       result = result.filter((t) => sourceFilters.has(t.sourceType));
     }
     return sortTasks(result);
-  }, [kpiFilters, sourceFilters]);
+  }, [kpiFilters, sourceFilters, searchQuery]);
 
   const kanbanPending = useMemo(() =>
     applyColumnFilters(tasks.filter((t) => t.status === "pending")),
@@ -278,7 +298,9 @@ export default function Dashboard() {
       else next.add(key);
       return next;
     });
-    if (activeSection !== "tasks") setActiveSection("tasks");
+    if (activeHash !== "" && activeHash !== "dashboard") {
+      window.location.hash = "";
+    }
   };
   const filteredActions = useMemo(() => {
     const tab = ACTION_FILTER_TABS.find((t) => t.key === activeActionTab) || ACTION_FILTER_TABS[0];
@@ -302,25 +324,23 @@ export default function Dashboard() {
   }), [tasks, actions]);
 
   return (
-    <div className="space-y-7">
-      {/* 상단 컨트롤 바 */}
+    <div className="space-y-5">
+
+      {/* ── 상단 컨트롤 바 ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* 연결 상태 - 그룹 pill */}
-        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-2">
           <ConnStatus label="Jira" connected={scanStatus?.jira} />
-          <div className="w-px h-3.5 bg-slate-200 mx-1" />
+          <div className="w-px h-3 bg-slate-200 mx-1" />
           <ConnStatus label="Slack" connected={scanStatus?.slack} />
-          <div className="w-px h-3.5 bg-slate-200 mx-1" />
+          <div className="w-px h-3 bg-slate-200 mx-1" />
           <ConnStatus label="Scheduler" connected={scanStatus?.scheduler} />
         </div>
-
-        {/* 액션 버튼 */}
         <div className="flex items-center gap-2">
           <TaskForm onCreated={handleRefreshAll} />
           <button
             onClick={handleScanNow}
             disabled={isScanning}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[var(--accent)] hover:bg-[var(--accent-dim)] text-white disabled:opacity-50 rounded-xl transition-all cursor-pointer shadow-sm shadow-[var(--accent)]/20"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[var(--accent)] hover:bg-[var(--accent-dim)] text-white disabled:opacity-50 rounded-xl transition-all cursor-pointer"
           >
             <ScanLine size={13} />
             {isScanning ? "스캔 중..." : "지금 스캔"}
@@ -328,122 +348,72 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 워크플로 바 */}
-      <WorkflowBar
-        status={workflowStatus}
-        running={workflowRunning}
-        onTrigger={handleWorkflow}
-      />
-
-      {/* SOD 모달 */}
+      {/* ── 모달 ── */}
       <AnimatePresence>
         {sodModalOpen && (
-          <WorkflowSODModal
-            onClose={() => setSodModalOpen(false)}
-            onSent={handleWorkflowSent}
-          />
+          <WorkflowSODModal onClose={() => setSodModalOpen(false)} onSent={handleWorkflowSent} />
         )}
       </AnimatePresence>
-
-      {/* EOD 모달 */}
       <AnimatePresence>
         {eodModalOpen && (
-          <WorkflowEODModal
-            onClose={() => setEodModalOpen(false)}
-            onSent={handleWorkflowSent}
-          />
+          <WorkflowEODModal onClose={() => setEodModalOpen(false)} onSent={handleWorkflowSent} />
         )}
       </AnimatePresence>
 
-      {/* KPI 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-        <KpiCard icon={<Clock size={14} />} label="대기" value={stats.pending}
-          activeIconClass="bg-slate-700 text-white"
-          activeValueClass="text-slate-700" activeBorderClass="border-slate-400"
-          active={kpiFilters.has("pending")} onClick={() => handleKpiClick("pending")} />
-        <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress}
-          activeIconClass="bg-[var(--secondary)] text-white"
-          activeValueClass="text-[var(--secondary)]" activeBorderClass="border-[var(--secondary)]"
-          active={kpiFilters.has("in_progress")} onClick={() => handleKpiClick("in_progress")} />
-        <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done}
-          activeIconClass="bg-emerald-500 text-white"
-          activeValueClass="text-emerald-600" activeBorderClass="border-emerald-400"
-          active={activeSection === "completed"} onClick={() => { setKpiFilters(new Set()); setActiveSection("completed"); }} />
-        <KpiCard icon={<CalendarDays size={14} />} label="오늘 까지" value={stats.dueToday}
-          activeIconClass="bg-orange-500 text-white"
-          activeValueClass="text-orange-600" activeBorderClass="border-orange-400"
-          alert={stats.dueToday > 0}
-          active={kpiFilters.has("dueToday")} onClick={() => handleKpiClick("dueToday")} />
-        <KpiCard icon={<AlertTriangle size={14} />} label="기한 초과" value={stats.overdue}
-          activeIconClass="bg-red-500 text-white"
-          activeValueClass="text-red-600" activeBorderClass="border-red-400"
-          alert={stats.overdue > 0}
-          active={kpiFilters.has("overdue")} onClick={() => handleKpiClick("overdue")} />
-        <KpiCard icon={<Link2Off size={14} />} label="연결 없음" value={stats.noLink}
-          activeIconClass="bg-slate-500 text-white"
-          activeValueClass="text-slate-600" activeBorderClass="border-slate-400"
-          active={kpiFilters.has("noLink")} onClick={() => handleKpiClick("noLink")} />
-        <KpiCard icon={<Bell size={14} />} label="승인 대기" value={stats.pendingActions}
-          activeIconClass="bg-amber-500 text-white"
-          activeValueClass="text-amber-600" activeBorderClass="border-amber-400"
-          alert={stats.pendingActions > 0}
-          onClick={() => { setKpiFilters(new Set()); setActiveSection("actions"); }} />
-      </div>
-
-      {/* 섹션 탭 */}
-      <div className="flex items-center gap-1 flex-wrap">
-        <SectionTab
-          active={activeSection === "tasks"}
-          onClick={() => setActiveSection("tasks")}
-          icon={<ListTodo size={13} />}
-          label="TO-DO"
-          count={stats.pending + stats.inProgress}
-        />
-        <SectionTab
-          active={activeSection === "actions"}
-          onClick={() => setActiveSection("actions")}
-          icon={<Bot size={13} />}
-          label="자동 액션"
-          count={stats.pendingActions > 0 ? stats.pendingActions : undefined}
-          badge={stats.pendingActions > 0}
-        />
-        <SectionTab
-          active={activeSection === "history"}
-          onClick={() => setActiveSection("history")}
-          icon={<History size={13} />}
-          label="스캔 이력"
-        />
-        <SectionTab
-          active={activeSection === "completed"}
-          onClick={() => setActiveSection("completed")}
-          icon={<CheckCircle2 size={13} />}
-          label="완료 이력"
-          count={stats.done > 0 ? stats.done : undefined}
-        />
-        {stats.cancelled > 0 && (
-          <SectionTab
-            active={activeSection === "cancelled"}
-            onClick={() => setActiveSection("cancelled")}
-            icon={<Ban size={13} />}
-            label="취소 이력"
-            count={stats.cancelled}
+      {/* ── 대시보드 뷰 ── */}
+      {(!activeHash || activeHash === "dashboard") && (
+        <>
+          {/* 하루 플로우 — 컴팩트 스트립 */}
+          <CompactWorkflowStrip
+            status={workflowStatus}
+            running={workflowRunning}
+            onTrigger={handleWorkflow}
           />
-        )}
-      </div>
 
-      {/* TO-DO 섹션 */}
-      <AnimatePresence mode="wait">
-        {activeSection === "tasks" && (
-          <motion.div
-            key="tasks"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 8 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-4"
-          >
-            {/* 출처 필터 (2차 필터) */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+          {/* 상태 필터 chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold text-slate-400 mr-1">필터</span>
+            {[
+              { key: "all",      label: "전체",     count: stats.total },
+              { key: "pending",  label: "대기",      count: stats.pending },
+              { key: "in_progress", label: "진행 중", count: stats.inProgress },
+              { key: "dueToday", label: "오늘 마감", count: stats.dueToday, alert: stats.dueToday > 0 },
+              { key: "overdue",  label: "기한 초과", count: stats.overdue, alert: stats.overdue > 0 },
+              { key: "noLink",   label: "연결 없음", count: stats.noLink },
+            ].map(({ key, label, count, alert }) => {
+              const isActive = key === "all" ? kpiFilters.size === 0 : kpiFilters.has(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    if (key === "all") {
+                      setKpiFilters(new Set());
+                    } else {
+                      handleKpiClick(key);
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-all",
+                    isActive
+                      ? "bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-[var(--accent-border)]"
+                  )}
+                >
+                  {label}
+                  <span className={cn("text-[11px] font-bold tabular-nums", isActive ? "text-white/80" : "text-[var(--accent)]")}>
+                    {count}
+                  </span>
+                  {alert && !isActive && count > 0 && (
+                    <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-soft-pulse" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 소스 필터 + 검색 */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
               {SOURCE_FILTERS.map((sf) => {
                 const isActive = sourceFilters.has(sf.key);
                 return (
@@ -451,8 +421,7 @@ export default function Dashboard() {
                     key={sf.key}
                     onClick={() => setSourceFilters((prev) => {
                       const next = new Set(prev);
-                      if (next.has(sf.key)) next.delete(sf.key);
-                      else next.add(sf.key);
+                      if (next.has(sf.key)) next.delete(sf.key); else next.add(sf.key);
                       return next;
                     })}
                     className={cn(
@@ -467,221 +436,288 @@ export default function Dashboard() {
               {sourceFilters.size > 0 && (
                 <button
                   onClick={() => setSourceFilters(new Set())}
-                  className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 transition-all cursor-pointer px-1"
+                  className="flex items-center gap-0.5 text-xs text-slate-400 hover:text-slate-600 cursor-pointer px-1"
                 >
                   <X size={11} /> 해제
                 </button>
               )}
             </div>
-
-            {kpiFilters.size > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--accent-glow)] border border-[var(--accent)]/15 rounded-2xl text-sm text-[var(--accent)] flex-wrap">
-                {Array.from(kpiFilters).map((k) => {
-                  const label = { pending: "대기", in_progress: "진행 중", done: "완료", dueToday: "오늘 까지", overdue: "기한 초과", noLink: "연결 없음" }[k];
-                  return (
-                    <span key={k} className="flex items-center gap-1 bg-white border border-[var(--accent)]/20 px-2.5 py-1 rounded-xl text-xs font-semibold shadow-sm">
-                      {label}
-                      <button onClick={() => handleKpiClick(k)} className="hover:text-[var(--accent-dim)] ml-0.5"><X size={10} /></button>
-                    </span>
-                  );
-                })}
-                <span className="text-[var(--accent)]/60 text-xs font-medium">{kanbanPending.length + kanbanActive.length + kanbanDone.length}건</span>
-                <button
-                  onClick={() => setKpiFilters(new Set())}
-                  className="ml-auto flex items-center gap-1 text-xs text-[var(--accent)] hover:text-[var(--accent-dim)] hover:bg-[var(--accent-glow)] px-2 py-1 rounded-xl transition-all"
-                >
-                  <X size={11} /> 전체 해제
+            {/* 검색 */}
+            <div className="relative flex items-center">
+              <svg className="absolute left-3 text-slate-400 pointer-events-none" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="제목·내용 검색..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-7 py-1.5 text-[13px] bg-white border border-slate-200 rounded-xl outline-none w-44 placeholder:text-slate-400 text-slate-700 transition-all focus:border-[var(--accent)]/40 focus:shadow-[0_0_0_3px_var(--accent-glow)]"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-2.5 text-slate-400 hover:text-slate-600 transition-colors">
+                  <X size={12} />
                 </button>
-              </div>
-            )}
-
-            {isLoading ? (
-              <LoadingSpinner />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                <KanbanColumn
-                  title="대기"
-                  tasks={kanbanPending}
-                  onUpdate={handleRefreshAll}
-                  dotColor="bg-slate-400"
-                  headerColor="text-slate-600"
-                  emptyLabel="대기 중인 할일 없음"
-                />
-                <KanbanColumn
-                  title="진행 중 · IN-QA"
-                  tasks={kanbanActive}
-                  onUpdate={handleRefreshAll}
-                  dotColor="bg-[var(--secondary)]"
-                  headerColor="text-[var(--secondary)]"
-                  emptyLabel="진행 중인 할일 없음"
-                />
-                <KanbanColumn
-                  title="완료"
-                  tasks={kanbanDone}
-                  onUpdate={handleRefreshAll}
-                  dotColor="bg-emerald-500"
-                  headerColor="text-emerald-600"
-                  emptyLabel="완료된 할일 없음"
-                />
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {/* 자동 액션 섹션 */}
-        {activeSection === "actions" && (
-          <motion.div
-            key="actions"
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-4"
-          >
-            <FilterBar
-              tabs={ACTION_FILTER_TABS}
-              active={activeActionTab}
-              onSelect={setActiveActionTab}
-              counts={ACTION_FILTER_TABS.reduce((acc, t) => ({ ...acc, [t.key]: actions.filter(t.filter).length }), {} as Record<string, number>)}
-              activeColor="bg-amber-600"
-            />
-
-            {filteredActions.length === 0 ? (
-              <EmptyState
-                icon={<Bot size={32} className="text-slate-300" />}
-                message={activeActionTab === "proposed" ? "대기 중인 액션이 없습니다" : "액션 기록이 없습니다"}
-                sub="30분 간격 자동 스캔 또는 '지금 스캔' 버튼으로 생성됩니다"
-              />
-            ) : (
-              <motion.div
-                className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-              >
-                <AnimatePresence>
-                  {filteredActions.map((action) => (
-                    <motion.div key={action.id} variants={itemVariants} layout exit="exit">
-                      <ActionCard action={action} onUpdate={handleRefreshAll} />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-
-        {/* 완료 이력 섹션 */}
-        {activeSection === "completed" && (
-          <motion.div
-            key="completed"
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-4"
-          >
-            <CompletedHistory tasks={tasks} onUpdate={handleRefreshAll} />
-          </motion.div>
-        )}
-
-        {/* 취소 이력 섹션 */}
-        {activeSection === "cancelled" && (
-          <motion.div
-            key="cancelled"
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-4"
-          >
-            <CancelledHistory tasks={tasks} onUpdate={handleRefreshAll} />
-          </motion.div>
-        )}
-
-        {/* 스캔 이력 섹션 */}
-        {activeSection === "history" && (
-          <motion.div
-            key="history"
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-4"
-          >
-            {/* 이번 스캔 결과 (임시, 세션 유지) */}
-            <AnimatePresence>
-              {lastScanItems && lastScanItems.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  className="bg-[var(--surface)] border border-purple-200 rounded-2xl p-4 shadow-[var(--shadow-card)]"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-soft-pulse" />
-                      <span className="text-sm font-semibold text-slate-700">이번 스캔 결과 <span className="text-purple-600">({lastScanItems.length}건)</span></span>
-                    </div>
-                    <button onClick={() => setLastScanItems(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg hover:bg-slate-100">
-                      <X size={13} />
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    {lastScanItems.map((item, i) => (
-                      <a
-                        key={i}
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--surface2)] transition-colors group overflow-hidden"
-                      >
-                        {item.type === "jira" ? (
-                          <>
-                            <span className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
-                            <span className="text-xs font-medium text-blue-600 flex-shrink-0">{item.key}</span>
-                            <span className="text-xs text-slate-600 truncate flex-1">{item.summary}</span>
-                            <span className="text-[10px] text-slate-400 flex-shrink-0">{item.status}</span>
-                          </>
-                        ) : (
-                          <>
-                            <MessageSquare size={12} className="text-purple-500 flex-shrink-0" />
-                            <span className="text-xs font-medium text-purple-600 flex-shrink-0">#{item.channel}</span>
-                            <span className="text-xs text-slate-600 truncate flex-1">{item.preview}</span>
-                          </>
-                        )}
-                        <ExternalLink size={10} className="text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
-                      </a>
-                    ))}
-                  </div>
-                </motion.div>
               )}
-            </AnimatePresence>
+            </div>
+          </div>
 
-            {/* 날짜별 이력 */}
-            {reports.length === 0 ? (
-              <EmptyState
-                icon={<History size={32} className="text-slate-300" />}
-                message="스캔 이력이 없습니다"
-                sub="'지금 스캔' 버튼을 눌러 첫 번째 스캔을 실행하세요"
-              />
-            ) : (
-              <motion.div
-                className="space-y-2"
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
+          {/* 활성 필터 요약 */}
+          {(kpiFilters.size > 0 || searchQuery.trim()) && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-[var(--accent-glow)] border border-[var(--accent-border)] rounded-xl text-sm flex-wrap">
+              {Array.from(kpiFilters).map((k) => {
+                const label = { pending: "대기", in_progress: "진행 중", done: "완료", dueToday: "오늘 마감", overdue: "기한 초과", noLink: "연결 없음" }[k];
+                return (
+                  <span key={k} className="flex items-center gap-1 bg-white border border-[var(--accent-border)] px-2 py-0.5 rounded-lg text-xs font-semibold text-[var(--accent)]">
+                    {label}
+                    <button onClick={() => handleKpiClick(k)}><X size={9} /></button>
+                  </span>
+                );
+              })}
+              {searchQuery.trim() && (
+                <span className="flex items-center gap-1 bg-white border border-[var(--accent-border)] px-2 py-0.5 rounded-lg text-xs font-semibold text-[var(--accent)]">
+                  "{searchQuery}"
+                  <button onClick={() => setSearchQuery("")}><X size={9} /></button>
+                </span>
+              )}
+              <span className="text-xs text-[var(--accent)]/60 ml-1">{kanbanPending.length + kanbanActive.length + kanbanDone.length}건</span>
+              <button
+                onClick={() => { setKpiFilters(new Set()); setSearchQuery(""); }}
+                className="ml-auto text-xs text-[var(--accent)] hover:underline"
               >
-                {reports.map((report) => (
-                  <motion.div key={report.id} variants={itemVariants}>
-                    <ReportCard report={report} />
+                전체 해제
+              </button>
+            </div>
+          )}
+
+          {/* 칸반 */}
+          {isLoading ? (
+            <LoadingSpinner />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+              <KanbanColumn title="대기" tasks={kanbanPending} onUpdate={handleRefreshAll} dotColor="bg-slate-300" headerColor="text-slate-500" emptyLabel="대기 중인 할일 없음" />
+              <KanbanColumn title="진행 중 · IN-QA" tasks={kanbanActive} onUpdate={handleRefreshAll} dotColor="bg-[var(--accent)]" headerColor="text-[var(--accent)]" emptyLabel="진행 중인 할일 없음" />
+              <KanbanColumn title="완료" tasks={kanbanDone} onUpdate={handleRefreshAll} dotColor="bg-slate-400" headerColor="text-slate-500" emptyLabel="완료된 할일 없음" />
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── 자동 액션 뷰 ── */}
+      {activeHash === "actions" && (
+        <motion.div key="actions" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
+          <FilterBar
+            tabs={ACTION_FILTER_TABS}
+            active={activeActionTab}
+            onSelect={setActiveActionTab}
+            counts={ACTION_FILTER_TABS.reduce((acc, t) => ({ ...acc, [t.key]: actions.filter(t.filter).length }), {} as Record<string, number>)}
+            activeColor="bg-[var(--accent)]"
+          />
+          {filteredActions.length === 0 ? (
+            <EmptyState icon={<Bot size={32} className="text-slate-300" />} message="대기 중인 액션이 없습니다" sub="30분 간격 자동 스캔 또는 '지금 스캔' 버튼으로 생성됩니다" />
+          ) : (
+            <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-4" variants={containerVariants} initial="hidden" animate="visible">
+              <AnimatePresence>
+                {filteredActions.map((action) => (
+                  <motion.div key={action.id} variants={itemVariants} layout exit="exit">
+                    <ActionCard action={action} onUpdate={handleRefreshAll} />
                   </motion.div>
                 ))}
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              </AnimatePresence>
+            </motion.div>
+          )}
+        </motion.div>
+      )}
+
+      {/* ── 완료 이력 뷰 ── */}
+      {activeHash === "completed" && (
+        <motion.div key="completed" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+          <CompletedHistory tasks={tasks} onUpdate={handleRefreshAll} />
+        </motion.div>
+      )}
+
+      {/* ── 스캔 이력 뷰 ── */}
+      {activeHash === "history" && (
+        <motion.div key="history" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
+          {lastScanItems && lastScanItems.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-[var(--accent-border)] rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-soft-pulse" />
+                  <span className="text-sm font-semibold text-slate-700">이번 스캔 결과 <span className="text-[var(--accent)]">({lastScanItems.length}건)</span></span>
+                </div>
+                <button onClick={() => setLastScanItems(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg hover:bg-slate-100"><X size={13} /></button>
+              </div>
+              <div className="space-y-1">
+                {lastScanItems.map((item, i) => (
+                  <a key={i} href={item.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--surface2)] transition-colors group overflow-hidden">
+                    {item.type === "jira" ? (
+                      <>
+                        <span className="w-4 h-4 rounded bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
+                        <span className="text-xs font-medium text-[var(--accent)] flex-shrink-0">{item.key}</span>
+                        <span className="text-xs text-slate-600 truncate flex-1">{item.summary}</span>
+                        <span className="text-[10px] text-slate-400 flex-shrink-0">{item.status}</span>
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare size={12} className="text-[var(--accent)] flex-shrink-0" />
+                        <span className="text-xs font-medium text-[var(--accent)] flex-shrink-0">#{item.channel}</span>
+                        <span className="text-xs text-slate-600 truncate flex-1">{item.preview}</span>
+                      </>
+                    )}
+                    <ExternalLink size={10} className="text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </motion.div>
+          )}
+          {reports.length === 0 ? (
+            <EmptyState icon={<History size={32} className="text-slate-300" />} message="스캔 이력이 없습니다" sub="'지금 스캔' 버튼을 눌러 첫 번째 스캔을 실행하세요" />
+          ) : (
+            <motion.div className="space-y-2" variants={containerVariants} initial="hidden" animate="visible">
+              {reports.map((report) => (
+                <motion.div key={report.id} variants={itemVariants}><ReportCard report={report} /></motion.div>
+              ))}
+            </motion.div>
+          )}
+        </motion.div>
+      )}
+
+      {/* ── 설정 뷰 ── */}
+      {activeHash === "settings" && (
+        <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+          <SettingsView scanStatus={scanStatus} />
+        </motion.div>
+      )}
+
+    </div>
+  );
+}
+
+// ===== 설정 뷰 =====
+function SettingsView({ scanStatus }: { scanStatus: ScanStatus | null }) {
+  const integrations = [
+    {
+      key: "jira",
+      name: "Jira",
+      abbr: "J",
+      connected: scanStatus?.jira,
+      detail1Label: "사이트",
+      detail1: "catchtable.atlassian.net",
+      detail2Label: "프로젝트",
+      detail2: "BIZWAIT",
+    },
+    {
+      key: "slack",
+      name: "Slack",
+      abbr: "S",
+      connected: scanStatus?.slack,
+      detail1Label: "워크스페이스",
+      detail1: "wad-hq.slack.com",
+      detail2Label: "유저",
+      detail2: "U042YQ0RUAY",
+    },
+  ];
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      {/* 섹션: 연동 상태 */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-slate-500 uppercase tracking-widest mb-3">연동 상태</h2>
+        <div className="grid grid-cols-2 gap-3">
+          {integrations.map((intg) => (
+            <div key={intg.key} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-[var(--shadow-card)]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[var(--accent)] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                    {intg.abbr}
+                  </div>
+                  <span className="text-[14px] font-semibold text-slate-700">{intg.name}</span>
+                </div>
+                <div className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-semibold",
+                  intg.connected === undefined
+                    ? "bg-slate-50 text-slate-400"
+                    : intg.connected
+                    ? "bg-emerald-50 text-emerald-600"
+                    : "bg-red-50 text-red-500"
+                )}>
+                  <div className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    intg.connected === undefined ? "bg-slate-300" : intg.connected ? "bg-emerald-500 animate-soft-pulse" : "bg-red-400"
+                  )} />
+                  {intg.connected === undefined ? "확인 중" : intg.connected ? "연결됨" : "연결 안됨"}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">{intg.detail1Label}</span>
+                  <span className="text-[11px] font-medium text-slate-600 truncate max-w-[140px]">{intg.detail1}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">{intg.detail2Label}</span>
+                  <span className="text-[11px] font-medium text-slate-600">{intg.detail2}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 섹션: 스캔 설정 */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-slate-500 uppercase tracking-widest mb-3">스캔 설정</h2>
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-[var(--shadow-card)]">
+          <div className="space-y-3">
+            {[
+              { label: "자동 스캔 주기", value: "30분 간격", note: "크론 스케줄러 (cron)" },
+              { label: "Jira 스캔 범위", value: "할당된 이슈 전체", note: "assignee = currentUser()" },
+              { label: "Slack 스캔 범위", value: "멘션 + DM", note: "최근 7일 기준" },
+              { label: "AI 액션 제안", value: "자동 생성", note: "Anthropic Claude 기반" },
+            ].map((row) => (
+              <div key={row.label} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                <div>
+                  <span className="text-[13px] font-medium text-slate-600">{row.label}</span>
+                  <span className="text-[11px] text-slate-400 ml-2">({row.note})</span>
+                </div>
+                <span className="text-[12px] font-semibold text-[var(--accent)] bg-[var(--accent-glow)] border border-[var(--accent-border)] px-2.5 py-1 rounded-full">
+                  {row.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 섹션: 사용자 */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-slate-500 uppercase tracking-widest mb-3">사용자</h2>
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-[var(--shadow-card)] flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-[var(--accent)] flex items-center justify-center text-white text-[15px] font-bold flex-shrink-0">주</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-semibold text-slate-700">주현우</p>
+            <p className="text-[12px] text-slate-400">B2B서비스</p>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-full">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-soft-pulse" />
+            <span className="text-[10px] font-semibold text-emerald-600">온라인</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 섹션: 데이터베이스 */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-slate-500 uppercase tracking-widest mb-3">데이터</h2>
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-[var(--shadow-card)]">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[13px] font-medium text-slate-600">로컬 SQLite DB</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">data/autopilot.db · Prisma ORM</p>
+            </div>
+            <span className="text-[11px] font-semibold text-[var(--accent)] bg-[var(--accent-glow)] border border-[var(--accent-border)] px-2.5 py-1 rounded-full">로컬 전용</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -689,16 +725,11 @@ export default function Dashboard() {
 // ===== 서브 컴포넌트 =====
 
 function KpiCard({
-  icon, label, value,
-  activeIconClass, activeValueClass, activeBorderClass,
-  alert, active, onClick,
+  icon, label, value, alert, active, onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
-  activeIconClass: string;
-  activeValueClass: string;
-  activeBorderClass: string;
   alert?: boolean;
   active?: boolean;
   onClick?: () => void;
@@ -709,31 +740,27 @@ function KpiCard({
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
       className={cn(
-        "relative bg-white rounded-2xl p-3.5 cursor-pointer transition-all",
-        "border shadow-sm",
+        "relative bg-white rounded-xl p-3.5 cursor-pointer transition-all border",
         active
-          ? `border-2 ${activeBorderClass} shadow-md`
-          : "border-slate-100 hover:border-slate-200 hover:shadow-[var(--shadow-card-hover)]"
+          ? "border-l-[3px] border-[var(--accent)] shadow-[var(--shadow-card-hover)]"
+          : "border-slate-100 hover:border-slate-200 hover:shadow-[var(--shadow-card)]"
       )}
-      style={{ transition: `box-shadow 0.3s var(--spring), border-color 0.3s var(--spring)` }}
     >
       <div className={cn(
-        "w-7 h-7 rounded-lg flex items-center justify-center mb-2.5 transition-all",
-        active ? activeIconClass : "bg-slate-100 text-slate-400"
+        "w-6 h-6 rounded-lg flex items-center justify-center mb-2.5 transition-all",
+        active ? "bg-[var(--accent)] text-white" : "bg-slate-100 text-slate-400"
       )}>
         {icon}
       </div>
       <div className={cn(
         "text-2xl font-bold tracking-tight leading-none",
-        active
-          ? (value > 0 ? activeValueClass : "text-slate-200")
-          : (value > 0 ? "text-slate-700" : "text-slate-200")
+        active ? "text-[var(--accent)]" : value > 0 ? "text-slate-700" : "text-slate-200"
       )}>
         {value}
       </div>
-      <div className="text-[10px] font-medium text-slate-400 mt-1.5 tracking-wide">{label}</div>
+      <div className="text-[10px] font-medium text-slate-400 mt-1.5">{label}</div>
       {alert && value > 0 && !active && (
-        <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-amber-400 animate-soft-pulse" />
+        <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-[var(--accent)] opacity-50 animate-soft-pulse" />
       )}
     </motion.div>
   );
@@ -798,7 +825,7 @@ function CompletedHistory({ tasks, onUpdate }: { tasks: TaskWithLinks[]; onUpdat
         <div key={dateStr}>
           {/* 날짜 헤더 */}
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+            <span className="text-[11px] font-semibold text-[var(--accent)] bg-[var(--accent-glow)] border border-[var(--accent-border)] px-2 py-0.5 rounded-full">
               {label}
             </span>
             <span className="text-[11px] text-slate-400">{groupTasks.length}건 완료</span>
@@ -842,7 +869,7 @@ function SectionTab({
       {label}
       {count !== undefined && (
         badge ? (
-          <span className="text-[10px] bg-amber-400 text-white px-1.5 py-0.5 rounded-full leading-none font-bold">
+          <span className="text-[10px] bg-[var(--accent)] text-white px-1.5 py-0.5 rounded-full leading-none font-bold">
             {count}
           </span>
         ) : (
@@ -1020,14 +1047,14 @@ function ReportCard({ report }: { report: DailyReport }) {
   })();
 
   return (
-    <div className="relative bg-[var(--surface)] border border-[var(--border2)] rounded-xl p-5 hover:border-purple-300 hover:shadow-[var(--shadow-card-hover)] transition-all overflow-hidden">
-      <div className="absolute left-0 top-0 bottom-0 w-1 bg-purple-400 rounded-l-xl" />
+    <div className="relative bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--accent-border)] hover:shadow-[var(--shadow-card-hover)] transition-all overflow-hidden">
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--accent)] rounded-l-xl" />
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <CalendarDays size={14} className="text-purple-500" />
+          <CalendarDays size={14} className="text-[var(--accent)]" />
           <span className="text-[15px] font-medium text-slate-700">{report.date}</span>
           {report.slackMessageTs && (
-            <span className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+            <span className="text-xs text-[var(--accent)] bg-[var(--accent-glow)] border border-[var(--accent-border)] px-1.5 py-0.5 rounded-full">
               Slack 발송됨
             </span>
           )}
@@ -1038,10 +1065,10 @@ function ReportCard({ report }: { report: DailyReport }) {
       {summary ? (
         <div className="grid grid-cols-4 gap-2">
           {[
-            { label: "진행 중",  value: summary.inProgress ?? 0,  color: "text-blue-600"    },
-            { label: "백로그",   value: summary.backlog    ?? 0,  color: "text-slate-500"   },
-            { label: "7일 완료", value: summary.done7d     ?? 0,  color: "text-emerald-600" },
-            { label: "대기 액션",value: pendingCount,              color: pendingCount > 0 ? "text-amber-600" : "text-slate-400" },
+            { label: "진행 중",  value: summary.inProgress ?? 0,  color: "text-[var(--accent)]" },
+            { label: "백로그",   value: summary.backlog    ?? 0,  color: "text-slate-500"        },
+            { label: "7일 완료", value: summary.done7d     ?? 0,  color: "text-slate-600"        },
+            { label: "대기 액션",value: pendingCount,              color: pendingCount > 0 ? "text-[var(--accent)]" : "text-slate-400" },
           ].map((item) => (
             <div key={item.label} className="bg-[var(--surface2)] rounded-xl p-3 text-center">
               <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
@@ -1056,124 +1083,81 @@ function ReportCard({ report }: { report: DailyReport }) {
   );
 }
 
-// ===== 워크플로 바 =====
-function WorkflowBar({
-  status,
-  running,
-  onTrigger,
+function CompactWorkflowStrip({
+  status, running, onTrigger,
 }: {
   status: WorkflowStatus | null;
   running: "eod" | "sod" | null;
   onTrigger: (type: "eod" | "sod") => void;
 }) {
-  const formatDate = (isoTime: string) => {
+  const formatTime = (iso: string) => {
     try {
-      const d = new Date(isoTime);
-      const mo = String(d.getMonth() + 1).padStart(2, "0");
-      const da = String(d.getDate()).padStart(2, "0");
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${mo}/${da} ${hh}:${mm}`;
-    } catch { return isoTime.slice(5, 16); }
+      const d = new Date(iso);
+      return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    } catch { return iso.slice(11, 16); }
   };
-
-  const formatLastTime = (createdAt: string) => {
-    try {
-      const d = new Date(createdAt);
-      const mo = String(d.getMonth() + 1).padStart(2, "0");
-      const da = String(d.getDate()).padStart(2, "0");
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${mo}/${da} ${hh}:${mm}`;
-    } catch { return createdAt.slice(5, 16); }
-  };
-
-  const isEodNext = status?.nextAction === "eod";
   const isSodNext = status?.nextAction === "sod";
+  const isEodNext = status?.nextAction === "eod";
 
   return (
-    <div className="flex flex-col sm:flex-row gap-2">
+    <div className="flex items-center gap-3 bg-white border border-slate-100 rounded-xl px-4 py-2.5">
       {/* 하루 시작 */}
-      <div className={cn(
-        "flex-1 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all",
-        isSodNext
-          ? "bg-white border-slate-900 shadow-sm"
-          : "bg-white border-slate-100"
-      )}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={cn(
-            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-            isSodNext ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400"
-          )}>
-            <Sunrise size={14} />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-slate-800 leading-tight">하루 시작</div>
-            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-              {status?.lastSod
-                ? `마지막: ${formatLastTime(status.lastSod.createdAt)}`
-                : "미실행"}
-              {" · "}
-              <span className={isSodNext ? "text-slate-600 font-medium" : ""}>
-                다음: {status ? formatDate(status.nextSodTime) : "--"}
-              </span>
-            </div>
-          </div>
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0", isSodNext ? "bg-[var(--accent)] text-white" : "bg-slate-100 text-slate-400")}>
+          <Sunrise size={13} />
         </div>
-        <button
-          onClick={() => onTrigger("sod")}
-          disabled={running !== null}
-          className={cn(
-            "flex-shrink-0 px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all cursor-pointer disabled:opacity-50",
-            isSodNext
-              ? "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+        <div className="min-w-0">
+          <span className="text-[12px] font-semibold text-slate-700">하루 시작</span>
+          {status?.lastSod ? (
+            <span className="text-[11px] text-slate-400 ml-1.5">마지막 {formatTime(status.lastSod.createdAt)}</span>
+          ) : (
+            <span className="text-[11px] text-slate-400 ml-1.5">미실행 · {status?.nextSodTime ?? "--:--"}</span>
           )}
-          style={{ transition: `all 0.25s var(--spring)` }}
-        >
-          {running === "sod" ? "처리 중..." : "시작"}
-        </button>
+        </div>
       </div>
 
+      <div className="w-px h-4 bg-slate-100 flex-shrink-0" />
+
       {/* 하루 마무리 */}
-      <div className={cn(
-        "flex-1 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all",
-        isEodNext
-          ? "bg-white border-slate-900 shadow-sm"
-          : "bg-white border-slate-100"
-      )}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={cn(
-            "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
-            isEodNext ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400"
-          )}>
-            <Sunset size={14} />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-slate-800 leading-tight">하루 마무리</div>
-            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-              {status?.lastEod
-                ? `마지막: ${formatLastTime(status.lastEod.createdAt)}`
-                : "미실행"}
-              {" · "}
-              <span className={isEodNext ? "text-slate-600 font-medium" : ""}>
-                다음: {status ? formatDate(status.nextEodTime) : "--"}
-              </span>
-            </div>
-          </div>
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0", isEodNext ? "bg-[var(--foreground)] text-white" : "bg-slate-100 text-slate-400")}>
+          <Sunset size={13} />
         </div>
+        <div className="min-w-0">
+          <span className="text-[12px] font-semibold text-slate-700">하루 마무리</span>
+          {status?.lastEod ? (
+            <span className="text-[11px] text-slate-400 ml-1.5">마지막 {formatTime(status.lastEod.createdAt)}</span>
+          ) : (
+            <span className="text-[11px] text-slate-400 ml-1.5">미실행 · {status?.nextEodTime ?? "--:--"}</span>
+          )}
+        </div>
+      </div>
+
+      {/* 버튼 */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
-          onClick={() => onTrigger("eod")}
-          disabled={running !== null}
+          onClick={() => onTrigger("sod")}
+          disabled={!!running}
           className={cn(
-            "flex-shrink-0 px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all cursor-pointer disabled:opacity-50",
-            isEodNext
-              ? "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
+            "px-3 py-1.5 text-[12px] font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50",
+            isSodNext
+              ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-dim)]"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
           )}
-          style={{ transition: `all 0.25s var(--spring)` }}
         >
-          {running === "eod" ? "처리 중..." : "마무리"}
+          {running === "sod" ? "처리중..." : "시작"}
+        </button>
+        <button
+          onClick={() => onTrigger("eod")}
+          disabled={!!running}
+          className={cn(
+            "px-3 py-1.5 text-[12px] font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50",
+            isEodNext
+              ? "bg-[var(--foreground)] text-white hover:bg-slate-800"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          )}
+        >
+          {running === "eod" ? "처리중..." : "마무리"}
         </button>
       </div>
     </div>

@@ -30,9 +30,9 @@ type JiraCreateField = {
 };
 
 const PRIORITY_CONFIG = {
-  high:   { label: "높음",  color: "text-red-600",   bg: "bg-red-50",   border: "border-red-300" },
-  medium: { label: "보통",  color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-300" },
-  low:    { label: "낮음",  color: "text-slate-500", bg: "bg-slate-100", border: "border-slate-300" },
+  high:   { label: "높음",  color: "text-white",                   bg: "bg-[var(--accent)]",          border: "border-[var(--accent)]" },
+  medium: { label: "보통",  color: "text-[var(--accent)]",         bg: "bg-[var(--accent-glow)]",     border: "border-[var(--accent-border)]" },
+  low:    { label: "낮음",  color: "text-[var(--accent)]/50",      bg: "bg-[var(--accent-glow)]/50",  border: "border-[var(--accent-border)]/50" },
 };
 
 export default function TaskForm({ onCreated }: TaskFormProps) {
@@ -220,7 +220,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.97 }}
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-400 text-emerald-700 rounded-xl transition-all cursor-pointer"
+        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[var(--accent)] hover:bg-[var(--accent-dim)] text-white rounded-xl transition-all cursor-pointer shadow-sm"
       >
         <Plus size={13} />
         새 할일
@@ -229,270 +229,275 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
   }
 
   return (
-    <AnimatePresence>
-      <motion.form
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: 0.2 }}
-        onSubmit={handleSubmit}
-        className="bg-[var(--surface)] border border-[var(--border2)] rounded-xl p-5 space-y-4 shadow-sm"
-      >
-        {/* 헤더 */}
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-semibold text-slate-700">새 할일</span>
-          <button
-            type="button"
-            onClick={resetForm}
-            className="text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-          >
-            <X size={14} />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      {/* 배경 오버레이 */}
+      <div
+        className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"
+        onClick={resetForm}
+      />
 
-        {/* 제목 */}
-        <input
-          type="text"
-          placeholder="할일 제목을 입력하세요"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full bg-[var(--surface2)] border border-[var(--border2)] rounded-lg px-4 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
-          autoFocus
-        />
+      {/* 모달 */}
+      <AnimatePresence>
+        <motion.form
+          initial={{ opacity: 0, scale: 0.96, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          onSubmit={handleSubmit}
+          className="relative z-10 bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 w-full max-w-lg overflow-y-auto max-h-[88vh] space-y-4"
+        >
+          {/* 헤더 */}
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[15px] font-bold text-slate-800">새 할일</span>
+            <button
+              type="button"
+              onClick={resetForm}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            >
+              <X size={15} />
+            </button>
+          </div>
 
-        {/* 설명 */}
-        <textarea
-          placeholder="설명 (선택사항)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          className="w-full bg-[var(--surface2)] border border-[var(--border2)] rounded-lg px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 resize-none transition-colors"
-        />
+          {/* 제목 */}
+          <input
+            type="text"
+            placeholder="할일 제목을 입력하세요"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full bg-[var(--surface2)] border border-[var(--border2)] rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[var(--accent)]/50 focus:ring-2 focus:ring-[var(--accent-glow)] transition-all"
+            autoFocus
+          />
 
-        {/* 우선순위 + 기한 */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="flex items-center gap-1 text-[10px] text-slate-500 mb-1.5 font-medium">
-              <Flag size={10} /> 우선순위
-            </label>
-            <div className="flex gap-1">
-              {(["high", "medium", "low"] as const).map((p) => {
-                const cfg = PRIORITY_CONFIG[p];
-                return (
+          {/* 설명 */}
+          <textarea
+            placeholder="설명 (선택사항)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full bg-[var(--surface2)] border border-[var(--border2)] rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[var(--accent)]/50 resize-none transition-all"
+          />
+
+          {/* 우선순위 + 기한 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="flex items-center gap-1 text-[11px] text-slate-500 mb-1.5 font-medium">
+                <Flag size={10} /> 우선순위
+              </label>
+              <div className="flex gap-1">
+                {(["high", "medium", "low"] as const).map((p) => {
+                  const cfg = PRIORITY_CONFIG[p];
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPriority(p)}
+                      className={`flex-1 py-1.5 text-[11px] rounded-lg border transition-all cursor-pointer font-medium ${
+                        priority === p
+                          ? `${cfg.bg} ${cfg.border} ${cfg.color}`
+                          : "border-[var(--border2)] text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)]"
+                      }`}
+                    >
+                      {cfg.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="flex items-center gap-1 text-[11px] text-slate-500 mb-1.5 font-medium">
+                <Calendar size={10} /> 기한
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className={selectClass}
+              />
+            </div>
+          </div>
+
+          {/* Jira 연결 */}
+          <div className="border-t border-[var(--border2)] pt-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                <GitBranch size={10} /> Jira
+              </span>
+              <div className="flex items-center gap-0.5 bg-[var(--surface2)] rounded-lg p-0.5">
+                {(["none", "link", "create"] as const).map((mode) => (
                   <button
-                    key={p}
+                    key={mode}
                     type="button"
-                    onClick={() => setPriority(p)}
-                    className={`flex-1 py-1.5 text-[10px] rounded-md border transition-all cursor-pointer font-medium ${
-                      priority === p
-                        ? `${cfg.bg} ${cfg.border} ${cfg.color}`
-                        : "border-[var(--border2)] text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)]"
+                    onClick={() => {
+                      setJiraMode(mode);
+                      if (mode !== "link") setJiraIssueKey("");
+                    }}
+                    className={`px-2.5 py-1 text-[10px] rounded-md transition-all cursor-pointer font-medium ${
+                      jiraMode === mode
+                        ? "bg-[var(--accent)] text-white"
+                        : "text-slate-500 hover:text-slate-700 hover:bg-[var(--surface)]"
                     }`}
                   >
-                    {cfg.label}
+                    {mode === "none" ? "연결 안함" : mode === "link" ? "기존 연결" : "새 이슈 생성"}
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="flex items-center gap-1 text-[10px] text-slate-500 mb-1.5 font-medium">
-              <Calendar size={10} /> 기한
-            </label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className={selectClass}
-            />
-          </div>
-        </div>
 
-        {/* Jira 연결 */}
-        <div className="border-t border-[var(--border2)] pt-4">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
-              <GitBranch size={10} /> Jira
-            </span>
-            <div className="flex items-center gap-0.5 bg-[var(--surface2)] rounded-lg p-0.5">
-              {(["none", "link", "create"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => {
-                    setJiraMode(mode);
-                    if (mode !== "link") setJiraIssueKey("");
-                  }}
-                  className={`px-2.5 py-1 text-[10px] rounded-md transition-all cursor-pointer font-medium ${
-                    jiraMode === mode
-                      ? mode === "create"
-                        ? "bg-emerald-600 text-white"
-                        : mode === "link"
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-600 text-white"
-                      : "text-slate-500 hover:text-slate-700 hover:bg-[var(--surface)]"
-                  }`}
+            <AnimatePresence mode="wait">
+              {jiraMode === "link" && (
+                <motion.div
+                  key="link"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.15 }}
                 >
-                  {mode === "none" ? "연결 안함" : mode === "link" ? "기존 연결" : "새 이슈 생성"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <AnimatePresence mode="wait">
-            {jiraMode === "link" && (
-              <motion.div
-                key="link"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <div className="flex items-center gap-2">
-                  <Hash size={13} className="text-slate-400 shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="예: BIZWAIT-5555"
-                    value={jiraIssueKey}
-                    onChange={(e) => setJiraIssueKey(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-              </motion.div>
-            )}
-
-            {jiraMode === "create" && (
-              <motion.div
-                key="create"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.15 }}
-                className="space-y-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3"
-              >
-                {loadingProjects ? (
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <Loader2 size={12} className="animate-spin" />
-                    프로젝트 로딩 중...
+                  <div className="flex items-center gap-2">
+                    <Hash size={13} className="text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="예: BIZWAIT-5555"
+                      value={jiraIssueKey}
+                      onChange={(e) => setJiraIssueKey(e.target.value)}
+                      className={inputClass}
+                    />
                   </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] text-emerald-700 mb-1 font-medium">프로젝트 *</label>
-                        <select
-                          value={selectedProject}
-                          onChange={(e) => setSelectedProject(e.target.value)}
-                          className={selectClass}
-                        >
-                          {projects.map((p) => (
-                            <option key={p.key} value={p.key}>
-                              {pinnedKeys.includes(p.key) ? "★ " : ""}{p.name} ({p.key})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-emerald-700 mb-1 font-medium">이슈 타입 *</label>
-                        {loadingIssueTypes ? (
-                          <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-500">
-                            <Loader2 size={11} className="animate-spin" /> 로딩 중...
-                          </div>
-                        ) : (
+                </motion.div>
+              )}
+
+              {jiraMode === "create" && (
+                <motion.div
+                  key="create"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="space-y-3 bg-[var(--accent-glow)] border border-[var(--accent-border)] rounded-xl p-3"
+                >
+                  {loadingProjects ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Loader2 size={12} className="animate-spin" />
+                      프로젝트 로딩 중...
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-[var(--accent)] mb-1 font-medium">프로젝트 *</label>
                           <select
-                            value={selectedIssueType?.id || ""}
-                            onChange={(e) => {
-                              const it = issueTypes.find((t) => t.id === e.target.value);
-                              setSelectedIssueType(it || null);
-                            }}
+                            value={selectedProject}
+                            onChange={(e) => setSelectedProject(e.target.value)}
                             className={selectClass}
-                            disabled={issueTypes.length === 0}
                           >
-                            {issueTypes.map((it) => (
-                              <option key={it.id} value={it.id}>{it.name}</option>
+                            {projects.map((p) => (
+                              <option key={p.key} value={p.key}>
+                                {pinnedKeys.includes(p.key) ? "★ " : ""}{p.name} ({p.key})
+                              </option>
                             ))}
                           </select>
-                        )}
-                      </div>
-                    </div>
-
-                    {loadingFields ? (
-                      <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <Loader2 size={12} className="animate-spin" />
-                        필드 로딩 중...
-                      </div>
-                    ) : visibleFields.length > 0 ? (
-                      <div className="space-y-2">
-                        <p className="text-[10px] text-emerald-600 border-b border-emerald-200 pb-1">
-                          추가 필드{visibleFields.filter((f) => f.required).length > 0 && " (* 필수)"}
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {visibleFields.map((field) => (
-                            <DynamicField
-                              key={field.fieldId}
-                              field={field}
-                              value={fieldValues[field.fieldId]}
-                              onChange={(val) => setFieldValue(field.fieldId, val)}
-                              inputClass={inputClass}
-                              selectClass={selectClass}
-                            />
-                          ))}
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-[var(--accent)] mb-1 font-medium">이슈 타입 *</label>
+                          {loadingIssueTypes ? (
+                            <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-500">
+                              <Loader2 size={11} className="animate-spin" /> 로딩 중...
+                            </div>
+                          ) : (
+                            <select
+                              value={selectedIssueType?.id || ""}
+                              onChange={(e) => {
+                                const it = issueTypes.find((t) => t.id === e.target.value);
+                                setSelectedIssueType(it || null);
+                              }}
+                              className={selectClass}
+                              disabled={issueTypes.length === 0}
+                            >
+                              {issueTypes.map((it) => (
+                                <option key={it.id} value={it.id}>{it.name}</option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                       </div>
-                    ) : null}
 
-                    <div className="flex items-center gap-1.5 pt-1 border-t border-emerald-200">
-                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                      <span className="text-[10px] text-emerald-600">
-                        제목 → Summary · 설명 → Description · 기한 → Due Date · 담당자 → 본인 (자동)
-                      </span>
-                    </div>
-                  </>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                      {loadingFields ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <Loader2 size={12} className="animate-spin" />
+                          필드 로딩 중...
+                        </div>
+                      ) : visibleFields.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-[10px] text-[var(--accent)] border-b border-[var(--accent-border)] pb-1">
+                            추가 필드{visibleFields.filter((f) => f.required).length > 0 && " (* 필수)"}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {visibleFields.map((field) => (
+                              <DynamicField
+                                key={field.fieldId}
+                                field={field}
+                                value={fieldValues[field.fieldId]}
+                                onChange={(val) => setFieldValue(field.fieldId, val)}
+                                inputClass={inputClass}
+                                selectClass={selectClass}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
 
-        {/* Slack */}
-        <div>
-          <label className="flex items-center gap-1 text-[10px] text-slate-500 mb-1.5 font-medium">
-            <MessageSquare size={10} /> Slack 스레드 URL (선택)
-          </label>
-          <input
-            type="url"
-            placeholder="https://wad-hq.slack.com/..."
-            value={slackThreadUrl}
-            onChange={(e) => setSlackThreadUrl(e.target.value)}
-            className={inputClass}
-          />
-        </div>
+                      <div className="flex items-center gap-1.5 pt-1 border-t border-[var(--accent-border)]">
+                        <div className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full opacity-60" />
+                        <span className="text-[10px] text-[var(--accent)]/70">
+                          제목 → Summary · 설명 → Description · 기한 → Due Date · 담당자 → 본인 (자동)
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-        {/* 버튼 */}
-        <div className="flex gap-2 justify-end pt-1">
-          <button
-            type="button"
-            onClick={resetForm}
-            className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-          >
-            취소
-          </button>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            type="submit"
-            disabled={!title.trim() || isSubmitting}
-            className="flex items-center gap-1.5 px-5 py-2 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-lg transition-colors cursor-pointer font-medium"
-          >
-            {isSubmitting ? (
-              <><Loader2 size={12} className="animate-spin" /> 처리 중...</>
-            ) : (
-              <><Plus size={12} /> {jiraMode === "create" ? "Jira + 할일 추가" : "할일 추가"}</>
-            )}
-          </motion.button>
-        </div>
-      </motion.form>
-    </AnimatePresence>
+          {/* Slack */}
+          <div>
+            <label className="flex items-center gap-1 text-[11px] text-slate-500 mb-1.5 font-medium">
+              <MessageSquare size={10} /> Slack 스레드 URL (선택)
+            </label>
+            <input
+              type="url"
+              placeholder="https://wad-hq.slack.com/..."
+              value={slackThreadUrl}
+              onChange={(e) => setSlackThreadUrl(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          {/* 버튼 */}
+          <div className="flex gap-2 justify-end pt-2 border-t border-[var(--border2)]">
+            <button
+              type="button"
+              onClick={resetForm}
+              className="px-4 py-2 text-[13px] text-slate-500 hover:text-slate-800 transition-colors cursor-pointer rounded-xl hover:bg-slate-100"
+            >
+              취소
+            </button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="submit"
+              disabled={!title.trim() || isSubmitting}
+              className="flex items-center gap-1.5 px-5 py-2 text-[13px] bg-[var(--accent)] hover:bg-[var(--accent-dim)] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl transition-all cursor-pointer font-semibold"
+            >
+              {isSubmitting ? (
+                <><Loader2 size={13} className="animate-spin" /> 처리 중...</>
+              ) : (
+                <><Plus size={13} /> {jiraMode === "create" ? "Jira + 할일 추가" : "할일 추가"}</>
+              )}
+            </motion.button>
+          </div>
+        </motion.form>
+      </AnimatePresence>
+    </div>
   );
 }
 
