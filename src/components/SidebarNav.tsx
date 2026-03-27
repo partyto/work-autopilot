@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 const NAV_MAIN = [
@@ -60,12 +59,12 @@ const NAV_BOTTOM = [
   },
 ];
 
-function NavItem({ item, isActive }: { item: { hash: string; label: string; icon: React.ReactNode }; isActive: boolean }) {
+function NavItem({ item, isActive, onClick }: { item: { hash: string; label: string; icon: React.ReactNode }; isActive: boolean; onClick: (hash: string) => void }) {
   return (
-    <Link
-      href={item.hash ? `/#${item.hash}` : "/"}
+    <button
+      onClick={() => onClick(item.hash)}
       className={cn(
-        "flex items-center gap-2.5 rounded-xl text-[13px] transition-all duration-150 px-3 py-2.5 group",
+        "w-full flex items-center gap-2.5 rounded-xl text-[13px] transition-all duration-150 px-3 py-2.5 group cursor-pointer text-left",
         isActive
           ? "bg-[var(--accent-glow)] text-[var(--accent)] font-semibold"
           : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
@@ -76,7 +75,7 @@ function NavItem({ item, isActive }: { item: { hash: string; label: string; icon
       </span>
       <span className="truncate">{item.label}</span>
       {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />}
-    </Link>
+    </button>
   );
 }
 
@@ -91,6 +90,14 @@ export default function SidebarNav() {
     update();
     window.addEventListener("hashchange", update);
     return () => window.removeEventListener("hashchange", update);
+  }, []);
+
+  const handleNav = useCallback((hash: string) => {
+    const newHash = hash || "";
+    window.location.hash = newHash;
+    setActiveHash(newHash);
+    // hashchange 이벤트를 명시적으로 발생시켜 Dashboard가 감지하도록
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
   }, []);
 
   return (
@@ -112,7 +119,7 @@ export default function SidebarNav() {
         <div className="space-y-0.5">
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">메인</p>
           {NAV_MAIN.map((item) => (
-            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} />
+            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} />
           ))}
         </div>
 
@@ -120,7 +127,7 @@ export default function SidebarNav() {
         <div className="space-y-0.5">
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">이력</p>
           {NAV_HISTORY.map((item) => (
-            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} />
+            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} />
           ))}
         </div>
 
@@ -128,7 +135,7 @@ export default function SidebarNav() {
         <div className="space-y-0.5">
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">기타</p>
           {NAV_BOTTOM.map((item) => (
-            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} />
+            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} />
           ))}
         </div>
       </nav>
