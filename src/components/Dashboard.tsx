@@ -91,9 +91,9 @@ const ACTION_FILTER_TABS = [
 ] as const;
 
 const SOURCE_FILTERS = [
-  { key: "jira_sync", label: "JIRA", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-blue-600 text-white border-blue-600" },
-  { key: "slack_detected", label: "SLACK", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-slate-700 text-white border-slate-700" },
-  { key: "manual", label: "SELF", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-slate-500 text-white border-slate-500" },
+  { key: "jira_sync", label: "JIRA", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-indigo-50 hover:border-indigo-200", activeColor: "bg-indigo-600 text-white border-indigo-600" },
+  { key: "slack_detected", label: "SLACK", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-green-50 hover:border-green-200", activeColor: "bg-green-600 text-white border-green-600" },
+  { key: "manual", label: "SELF", color: "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300", activeColor: "bg-slate-600 text-white border-slate-600" },
 ] as const;
 
 // 모듈 스코프 상수 (렌더링마다 재생성 방지)
@@ -320,7 +320,7 @@ export default function Dashboard() {
           <button
             onClick={handleScanNow}
             disabled={isScanning}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 rounded-xl transition-all cursor-pointer shadow-sm shadow-blue-200"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[var(--accent)] hover:bg-[var(--accent-dim)] text-white disabled:opacity-50 rounded-xl transition-all cursor-pointer shadow-sm shadow-[var(--accent)]/20"
           >
             <ScanLine size={13} />
             {isScanning ? "스캔 중..." : "지금 스캔"}
@@ -362,8 +362,8 @@ export default function Dashboard() {
           activeValueClass="text-slate-700" activeBorderClass="border-slate-400"
           active={kpiFilters.has("pending")} onClick={() => handleKpiClick("pending")} />
         <KpiCard icon={<CircleDot size={14} />} label="진행 중" value={stats.inProgress}
-          activeIconClass="bg-blue-500 text-white"
-          activeValueClass="text-blue-600" activeBorderClass="border-blue-400"
+          activeIconClass="bg-[var(--secondary)] text-white"
+          activeValueClass="text-[var(--secondary)]" activeBorderClass="border-[var(--secondary)]"
           active={kpiFilters.has("in_progress")} onClick={() => handleKpiClick("in_progress")} />
         <KpiCard icon={<CheckCircle2 size={14} />} label="완료" value={stats.done}
           activeIconClass="bg-emerald-500 text-white"
@@ -475,20 +475,20 @@ export default function Dashboard() {
             </div>
 
             {kpiFilters.size > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50/80 border border-blue-100 rounded-2xl text-sm text-blue-700 flex-wrap">
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--accent-glow)] border border-[var(--accent)]/15 rounded-2xl text-sm text-[var(--accent)] flex-wrap">
                 {Array.from(kpiFilters).map((k) => {
                   const label = { pending: "대기", in_progress: "진행 중", done: "완료", dueToday: "오늘 까지", overdue: "기한 초과", noLink: "연결 없음" }[k];
                   return (
-                    <span key={k} className="flex items-center gap-1 bg-white border border-blue-200 px-2.5 py-1 rounded-xl text-xs font-semibold shadow-sm">
+                    <span key={k} className="flex items-center gap-1 bg-white border border-[var(--accent)]/20 px-2.5 py-1 rounded-xl text-xs font-semibold shadow-sm">
                       {label}
-                      <button onClick={() => handleKpiClick(k)} className="hover:text-blue-900 ml-0.5"><X size={10} /></button>
+                      <button onClick={() => handleKpiClick(k)} className="hover:text-[var(--accent-dim)] ml-0.5"><X size={10} /></button>
                     </span>
                   );
                 })}
-                <span className="text-blue-400 text-xs font-medium">{kanbanPending.length + kanbanActive.length + kanbanDone.length}건</span>
+                <span className="text-[var(--accent)]/60 text-xs font-medium">{kanbanPending.length + kanbanActive.length + kanbanDone.length}건</span>
                 <button
                   onClick={() => setKpiFilters(new Set())}
-                  className="ml-auto flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-100 px-2 py-1 rounded-xl transition-all"
+                  className="ml-auto flex items-center gap-1 text-xs text-[var(--accent)] hover:text-[var(--accent-dim)] hover:bg-[var(--accent-glow)] px-2 py-1 rounded-xl transition-all"
                 >
                   <X size={11} /> 전체 해제
                 </button>
@@ -511,8 +511,8 @@ export default function Dashboard() {
                   title="진행 중 · IN-QA"
                   tasks={kanbanActive}
                   onUpdate={handleRefreshAll}
-                  dotColor="bg-blue-500"
-                  headerColor="text-blue-600"
+                  dotColor="bg-[var(--secondary)]"
+                  headerColor="text-[var(--secondary)]"
                   emptyLabel="진행 중인 할일 없음"
                 />
                 <KanbanColumn
@@ -833,8 +833,8 @@ function SectionTab({
         "flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium rounded-xl cursor-pointer transition-all",
         "duration-200",
         active
-          ? "bg-slate-900 text-white shadow-sm"
-          : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+          ? "bg-[var(--accent)] text-white shadow-sm shadow-[var(--accent)]/15"
+          : "text-slate-400 hover:text-[var(--accent)] hover:bg-[var(--surface2)]"
       )}
       style={{ transition: `background 0.2s var(--spring), color 0.2s var(--spring)` }}
     >
@@ -885,7 +885,7 @@ function FilterBar({
 function LoadingSpinner() {
   return (
     <div className="flex flex-col items-center justify-center py-24 gap-3">
-      <div className="w-8 h-8 border-[2.5px] border-[var(--border2)] border-t-blue-500 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-[2.5px] border-[var(--border2)] border-t-[var(--accent)] rounded-full animate-spin" />
       <span className="text-sm text-slate-500">로딩 중...</span>
     </div>
   );
