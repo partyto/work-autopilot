@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
-import { nowLocal } from "@/lib/utils";
+import { nowLocal, generateId } from "@/lib/utils";
 import { executeApprovedActions } from "@/lib/engine";
 
 // PATCH /api/actions/[id] - 액션 상태 변경 (승인/거절/실행완료)
@@ -46,15 +46,40 @@ export async function PATCH(
       }
     }
 
-    // 거절 시: todo_create placeholder task를 cancelled로 변경 (삭제 시 CASCADE로 action도 삭제되어 재스캔 시 중복 생성되는 문제 방지)
+    // 거절 시: placeholder task를 cancelled로 변경 + taskLink 생성 (재스캔 시 중복 방지)
     if (body.status === "rejected") {
       const action = await db.query.actions.findFirst({
         where: eq(schema.actions.id, id),
-        columns: { actionType: true, taskId: true },
+        columns: { actionType: true, taskId: true, payload: true },
       });
       if (action?.actionType === "todo_create") {
+        // placeholder task → cancelled
         await db.update(schema.tasks).set({ status: "cancelled", updatedAt: now })
           .where(eq(schema.tasks.id, action.taskId));
+
+        // payload에서 threadTs/channelId 추출 → taskLink 생성 (재스캔 시 existingLink 체크에 걸리도록)
+        try {
+          const payload = JSON.parse(action.payload || "{}");
+          if (payload.threadTs) {
+            await db.insert(schema.taskLinks).values({
+              id: generateId(),
+              taskId: action.taskId,
+              linkType: "slack_thread",
+              slackThreadTs: payload.threadTs,
+              slackChannelName: payload.channelId || null,
+              slackThreadUrl: payload.threadUrl || null,
+            }).onConflictDoNothing();
+          }
+          if (payload.jiraIssueKey) {
+            await db.insert(schema.taskLinks).values({
+              id: generateId(),
+              taskId: action.taskId,
+              linkType: "jira",
+              jiraIssueKey: payload.jiraIssueKey,
+              jiraIssueUrl: `https://catchtable.atlassian.net/browse/${payload.jiraIssueKey}`,
+            }).onConflictDoNothing();
+          }
+        } catch { /* payload 파싱 실패 무시 */ }
       }
     }
 
