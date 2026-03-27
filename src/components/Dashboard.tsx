@@ -379,7 +379,6 @@ export default function Dashboard() {
               { key: "in_progress", label: "진행 중", count: stats.inProgress },
               { key: "dueToday", label: "오늘 마감", count: stats.dueToday, alert: stats.dueToday > 0 },
               { key: "overdue",  label: "기한 초과", count: stats.overdue, alert: stats.overdue > 0 },
-              { key: "noLink",   label: "연결 없음", count: stats.noLink },
             ].map(({ key, label, count, alert }) => {
               const isActive = key === "all" ? kpiFilters.size === 0 : kpiFilters.has(key);
               return (
@@ -466,7 +465,7 @@ export default function Dashboard() {
           {(kpiFilters.size > 0 || searchQuery.trim()) && (
             <div className="flex items-center gap-2 px-3 py-2 bg-[var(--accent-glow)] border border-[var(--accent-border)] rounded-xl text-sm flex-wrap">
               {Array.from(kpiFilters).map((k) => {
-                const label = { pending: "대기", in_progress: "진행 중", done: "완료", dueToday: "오늘 마감", overdue: "기한 초과", noLink: "연결 없음" }[k];
+                const label = { pending: "대기", in_progress: "진행 중", done: "완료", dueToday: "오늘 마감", overdue: "기한 초과" }[k];
                 return (
                   <span key={k} className="flex items-center gap-1 bg-white border border-[var(--accent-border)] px-2 py-0.5 rounded-lg text-xs font-semibold text-[var(--accent)]">
                     {label}

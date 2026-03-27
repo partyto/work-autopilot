@@ -30,9 +30,9 @@ type JiraCreateField = {
 };
 
 const PRIORITY_CONFIG = {
-  high:   { label: "높음",  color: "text-white",                   bg: "bg-[var(--accent)]",          border: "border-[var(--accent)]" },
-  medium: { label: "보통",  color: "text-[var(--accent)]",         bg: "bg-[var(--accent-glow)]",     border: "border-[var(--accent-border)]" },
-  low:    { label: "낮음",  color: "text-[var(--accent)]/50",      bg: "bg-[var(--accent-glow)]/50",  border: "border-[var(--accent-border)]/50" },
+  high:   { label: "높음",  color: "text-white",            bg: "bg-red-500",              border: "border-red-500" },
+  medium: { label: "보통",  color: "text-[var(--accent)]",  bg: "bg-[var(--accent-glow)]", border: "border-[var(--accent-border)]" },
+  low:    { label: "낮음",  color: "text-slate-400",        bg: "bg-slate-100",            border: "border-slate-200" },
 };
 
 export default function TaskForm({ onCreated }: TaskFormProps) {

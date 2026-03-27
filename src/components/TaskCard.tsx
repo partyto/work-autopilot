@@ -59,21 +59,21 @@ const STATUS_DOT: Record<string, string> = {
 const PRIORITY_CONFIG: Record<string, { label: string; barColor: string; badgeClass: string; flagColor: string }> = {
   high: {
     label: "높음",
-    barColor: "bg-[var(--accent)]",
-    badgeClass: "bg-[var(--accent)] text-white border-[var(--accent)]",
-    flagColor: "text-[var(--accent)]",
+    barColor: "bg-red-500",
+    badgeClass: "bg-red-50 text-red-600 border-red-200",
+    flagColor: "text-red-500",
   },
   medium: {
     label: "중간",
-    barColor: "bg-[var(--accent)]/60",
+    barColor: "bg-[var(--accent)]",
     badgeClass: "bg-[var(--accent-glow)] text-[var(--accent)] border-[var(--accent-border)]",
-    flagColor: "text-[var(--accent)]/70",
+    flagColor: "text-[var(--accent)]",
   },
   low: {
     label: "낮음",
-    barColor: "bg-[var(--accent)]/25",
-    badgeClass: "bg-[var(--accent-glow)]/50 text-[var(--accent)]/50 border-[var(--accent-border)]/50",
-    flagColor: "text-[var(--accent)]/40",
+    barColor: "bg-slate-300",
+    badgeClass: "bg-slate-100 text-slate-400 border-slate-200",
+    flagColor: "text-slate-400",
   },
 };
 
@@ -272,7 +272,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
               {SOURCE_BADGE[task.sourceType] && (
                 <span className={cn(
                   "flex-shrink-0 font-bold rounded-md leading-none tracking-wide",
-                  compact ? "text-[9px] px-1 py-0.5" : "text-[10px] px-1.5 py-0.5",
+                  compact ? "text-[10px] px-1.5 py-0.5" : "text-[11px] px-2 py-0.5",
                   SOURCE_BADGE[task.sourceType].className
                 )}>
                   {SOURCE_BADGE[task.sourceType].label}
@@ -292,7 +292,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   }}
                   className={cn(
                     "flex-1 font-semibold text-slate-800 bg-blue-50 border border-blue-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-200 min-w-0",
-                    compact ? "text-[13px]" : "text-[15px]"
+                    compact ? "text-sm" : "text-base"
                   )}
                 />
               ) : (
@@ -300,7 +300,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   onClick={() => { if (!isDone) setEditingTitle(true); }}
                   className={cn(
                     "font-semibold leading-snug truncate",
-                    compact ? "text-[13px]" : "text-[15px]",
+                    compact ? "text-sm" : "text-base",
                     isDone ? "line-through text-slate-400" : "text-slate-800 cursor-text hover:text-[var(--accent)] transition-colors"
                   )}
                   title="클릭해서 수정"
@@ -315,7 +315,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   onClick={() => setShowPriorityMenu(!showPriorityMenu)}
                   className={cn(
                     "flex items-center gap-1 font-semibold rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer",
-                    compact ? "text-[9px] px-1 py-0.5" : "text-[10px] px-1.5 py-0.5",
+                    compact ? "text-[10px] px-1.5 py-0.5" : "text-[11px] px-2 py-1",
                     pCfg.badgeClass
                   )}
                   title="우선순위 변경"
@@ -368,7 +368,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                 <button
                   onClick={() => setEditingDue(true)}
                   className={cn(
-                    "flex items-center gap-1 text-[11px] rounded-md px-1.5 py-0.5 transition-all hover:bg-slate-100 cursor-pointer",
+                    "flex items-center gap-1 text-xs rounded-md px-1.5 py-0.5 transition-all hover:bg-slate-100 cursor-pointer",
                     isDue ? "text-[var(--accent)] font-medium" : isDueToday ? "text-[var(--accent)] font-medium" : isDueSoon ? "text-slate-500" : "text-slate-400 hover:text-slate-600"
                   )}
                   title="기한 설정"
@@ -380,17 +380,17 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
 
               {!compact && (() => {
                 const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
-                return <span className="text-[11px] text-slate-400">{label} {value}</span>;
+                return <span className="text-xs text-slate-400">{label} {value}</span>;
               })()}
               {compact && (() => {
                 const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
-                return <span className="text-[10px] text-slate-400">{value.slice(5, 16)}</span>;
+                return <span className="text-[11px] text-slate-400">{value.slice(5, 16)}</span>;
               })()}
               {task.completedAt && (
-                <span className={cn("text-slate-400", compact ? "text-[10px]" : "text-[11px]")}>완료 {formatDateTime(task.completedAt)}</span>
+                <span className={cn("text-slate-400", compact ? "text-[11px]" : "text-xs")}>완료 {formatDateTime(task.completedAt)}</span>
               )}
               {hasNoLinks && (
-                <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                <span className="flex items-center gap-1 text-xs text-slate-400">
                   <Link2Off size={10} />연결 없음
                 </span>
               )}
@@ -424,7 +424,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
           >
             <MessageSquare size={10} className="flex-shrink-0 mt-0.5 text-slate-300" />
             <p className={cn(
-              "flex-1 text-[11px] text-slate-400 leading-relaxed min-w-0 transition-all",
+              "flex-1 text-xs text-slate-400 leading-relaxed min-w-0 transition-all",
               expanded ? "whitespace-pre-wrap break-words" : "truncate"
             )}>
               {task.description}
@@ -458,7 +458,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                 disabled={isUpdating}
                 className={cn(
                   "flex-1 rounded-md font-medium transition-all cursor-pointer text-center",
-                  compact ? "px-1 py-1 text-[10px]" : "px-2.5 py-1.5 text-xs",
+                  compact ? "px-1.5 py-1 text-[11px]" : "px-2.5 py-1.5 text-sm",
                   task.status === s
                     ? cn(STATUS_COLORS[s], "text-white shadow-sm")
                     : "text-slate-500 hover:text-slate-700 hover:bg-white"
@@ -479,10 +479,10 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   rel="noopener noreferrer"
                   className={cn(
                     "flex items-center gap-1 bg-[var(--accent-glow)] hover:bg-[var(--surface2)] border border-[var(--accent-border)] text-[var(--accent)] rounded-lg shadow-sm transition-colors min-w-0 max-w-full",
-                    compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
+                    compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
                   )}
                 >
-                  <span className="w-3 h-3 rounded bg-[var(--accent)] flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0">J</span>
+                  <span className="w-3.5 h-3.5 rounded bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
                   <span className="truncate max-w-[100px]">{jiraLink.jiraIssueKey}</span>
                   {jiraLink.jiraStatus && <span className="text-[var(--accent)]/60 truncate max-w-[70px] flex-shrink-0">· {jiraLink.jiraStatus}</span>}
                   <ExternalLink size={9} className="opacity-50 flex-shrink-0" />
@@ -495,10 +495,10 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   rel="noopener noreferrer"
                   className={cn(
                     "flex items-center gap-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 rounded-lg shadow-sm transition-colors flex-shrink-0",
-                    compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs"
+                    compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
                   )}
                 >
-                  <MessageSquare size={9} />
+                  <MessageSquare size={10} />
                   Slack
                   <ExternalLink size={9} className="opacity-50" />
                 </a>
