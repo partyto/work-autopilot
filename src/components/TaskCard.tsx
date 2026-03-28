@@ -262,175 +262,165 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
         <div className={cn("w-full h-full cursor-pointer", pCfg.barColor)} onClick={() => setShowPriorityMenu(true)} title="우선순위 변경" />
       </div>
 
-      <div className={cn("pl-[18px]", compact ? "px-3 py-2.5" : "px-5 py-4")}>
-        {/* Header */}
-        <div className="flex items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <div className={cn("flex items-center gap-2 flex-wrap", compact ? "mb-1" : "mb-1.5")}>
-              <div className={cn("rounded-full flex-shrink-0 mt-0.5", compact ? "w-2 h-2" : "w-2.5 h-2.5", STATUS_DOT[task.status] || "bg-slate-400")} />
-
-              {SOURCE_BADGE[task.sourceType] && (
-                <span className={cn(
-                  "flex-shrink-0 font-bold rounded-md leading-none tracking-wide",
-                  compact ? "text-[10px] px-1.5 py-0.5" : "text-[11px] px-2 py-0.5",
-                  SOURCE_BADGE[task.sourceType].className
-                )}>
-                  {SOURCE_BADGE[task.sourceType].label}
-                </span>
-              )}
-
-              {/* 제목 — 클릭해서 인라인 편집 */}
-              {editingTitle ? (
-                <input
-                  ref={titleInputRef}
-                  value={titleValue}
-                  onChange={(e) => setTitleValue(e.target.value)}
-                  onBlur={handleTitleSave}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleTitleSave();
-                    if (e.key === "Escape") { setEditingTitle(false); setTitleValue(task.title); }
-                  }}
-                  className={cn(
-                    "flex-1 font-semibold text-slate-800 bg-blue-50 border border-blue-300 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-blue-200 min-w-0",
-                    compact ? "text-sm" : "text-base"
-                  )}
-                />
-              ) : (
-                <h3
-                  onClick={() => { if (!isDone) setEditingTitle(true); }}
-                  className={cn(
-                    "font-semibold leading-snug truncate",
-                    compact ? "text-sm" : "text-base",
-                    isDone ? "line-through text-slate-400" : "text-slate-800 cursor-text hover:text-[var(--accent)] transition-colors"
-                  )}
-                  title="클릭해서 수정"
-                >
-                  {task.title}
-                </h3>
-              )}
-
-              {/* 우선순위 배지 */}
-              <div className="relative flex-shrink-0" ref={priorityMenuRef}>
-                <button
-                  onClick={() => setShowPriorityMenu(!showPriorityMenu)}
-                  className={cn(
-                    "flex items-center gap-1 font-semibold rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer",
-                    compact ? "text-[10px] px-1.5 py-0.5" : "text-[11px] px-2 py-1",
-                    pCfg.badgeClass
-                  )}
-                  title="우선순위 변경"
-                >
-                  <Flag size={compact ? 8 : 9} />
-                  {pCfg.label}
-                </button>
-                {showPriorityMenu && (
-                  <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-lg border border-slate-200 py-1 min-w-[90px]">
-                    {PRIORITIES.map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => handlePriorityChange(p)}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors cursor-pointer",
-                          task.priority === p ? "font-bold" : ""
-                        )}
-                      >
-                        <Flag size={10} className={PRIORITY_CONFIG[p].flagColor} />
-                        {PRIORITY_CONFIG[p].label}
-                      </button>
-                    ))}
-                  </div>
+      <div className={cn("pl-[18px]", compact ? "px-3.5 py-3" : "px-5 py-4")}>
+        {/* 상단: 배지 + 삭제 */}
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className={cn("rounded-full flex-shrink-0", compact ? "w-2 h-2" : "w-2.5 h-2.5", STATUS_DOT[task.status] || "bg-slate-400")} />
+            {SOURCE_BADGE[task.sourceType] && (
+              <span className={cn(
+                "flex-shrink-0 font-bold rounded-md leading-none tracking-wide text-[10px] px-1.5 py-0.5",
+                SOURCE_BADGE[task.sourceType].className
+              )}>
+                {SOURCE_BADGE[task.sourceType].label}
+              </span>
+            )}
+            {/* 우선순위 배지 */}
+            <div className="relative flex-shrink-0" ref={priorityMenuRef}>
+              <button
+                onClick={() => setShowPriorityMenu(!showPriorityMenu)}
+                className={cn(
+                  "flex items-center gap-1 font-semibold rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer text-[10px] px-1.5 py-0.5",
+                  pCfg.badgeClass
                 )}
-              </div>
-            </div>
-
-            {/* 메타 정보 */}
-            <div className={cn("flex items-center flex-wrap ml-4", compact ? "gap-2 mt-0.5" : "gap-3 mt-1")}>
-              {editingDue ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    type="date"
-                    defaultValue={task.dueDate?.slice(0, 10) || ""}
-                    autoFocus
-                    onBlur={(e) => handleDueSave(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleDueSave((e.target as HTMLInputElement).value);
-                      if (e.key === "Escape") setEditingDue(false);
-                    }}
-                    className="text-[11px] border border-blue-300 rounded-lg px-2 py-0.5 bg-blue-50 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
-                  />
-                  {task.dueDate && (
-                    <button onClick={() => handleDueSave("")} className="text-slate-400 hover:text-red-500">
-                      <X size={11} />
+                title="우선순위 변경"
+              >
+                <Flag size={8} />
+                {pCfg.label}
+              </button>
+              {showPriorityMenu && (
+                <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-lg border border-slate-200 py-1 min-w-[90px]">
+                  {PRIORITIES.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => handlePriorityChange(p)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors cursor-pointer",
+                        task.priority === p ? "font-bold" : ""
+                      )}
+                    >
+                      <Flag size={10} className={PRIORITY_CONFIG[p].flagColor} />
+                      {PRIORITY_CONFIG[p].label}
                     </button>
-                  )}
+                  ))}
                 </div>
-              ) : (
-                <button
-                  onClick={() => setEditingDue(true)}
-                  className={cn(
-                    "flex items-center gap-1 text-xs rounded-md px-1.5 py-0.5 transition-all hover:bg-slate-100 cursor-pointer",
-                    isDue ? "text-[var(--accent)] font-medium" : isDueToday ? "text-[var(--accent)] font-medium" : isDueSoon ? "text-slate-500" : "text-slate-400 hover:text-slate-600"
-                  )}
-                  title="기한 설정"
-                >
-                  {isDue || isDueToday ? <AlertCircle size={10} /> : <Calendar size={10} />}
-                  {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate.slice(0,10)}` : isDueToday ? `오늘 ${task.dueDate.slice(0,10)}` : `마감 ${task.dueDate.slice(0,10)}`) : "기한 없음"}
-                </button>
-              )}
-
-              {!compact && (() => {
-                const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
-                return <span className="text-xs text-slate-400">{label} {value}</span>;
-              })()}
-              {compact && (() => {
-                const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
-                return <span className="text-[11px] text-slate-400">{value.slice(5, 16)}</span>;
-              })()}
-              {task.completedAt && (
-                <span className={cn("text-slate-400", compact ? "text-[11px]" : "text-xs")}>완료 {formatDateTime(task.completedAt)}</span>
-              )}
-              {hasNoLinks && (
-                <span className="flex items-center gap-1 text-xs text-slate-400">
-                  <Link2Off size={10} />연결 없음
-                </span>
               )}
             </div>
           </div>
-
           {/* 우측 액션 */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-80 transition-opacity flex-shrink-0">
             {task.description && task.sourceType !== "slack_detected" && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-[var(--surface2)] rounded-lg transition-all cursor-pointer"
               >
                 {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
             )}
             <button
               onClick={handleDelete}
-              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+              className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
             >
               <Trash2 size={13} />
             </button>
           </div>
         </div>
 
+        {/* 제목 — 별도 행으로 크게 표시 */}
+        {editingTitle ? (
+          <input
+            ref={titleInputRef}
+            value={titleValue}
+            onChange={(e) => setTitleValue(e.target.value)}
+            onBlur={handleTitleSave}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleTitleSave();
+              if (e.key === "Escape") { setEditingTitle(false); setTitleValue(task.title); }
+            }}
+            className={cn(
+              "w-full font-semibold text-slate-800 bg-blue-50 border border-blue-300 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-200",
+              compact ? "text-[15px]" : "text-[17px]"
+            )}
+          />
+        ) : (
+          <h3
+            onClick={() => { if (!isDone) setEditingTitle(true); }}
+            className={cn(
+              "font-semibold leading-snug",
+              compact ? "text-[15px]" : "text-[17px]",
+              compact ? "truncate" : "line-clamp-2",
+              isDone ? "line-through text-slate-400" : "text-slate-800 cursor-text hover:text-[var(--accent)] transition-colors"
+            )}
+            title="클릭해서 수정"
+          >
+            {task.title}
+          </h3>
+        )}
+
+        {/* 메타 정보 */}
+        <div className={cn("flex items-center flex-wrap gap-2.5", compact ? "mt-1.5" : "mt-2")}>
+          {editingDue ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                defaultValue={task.dueDate?.slice(0, 10) || ""}
+                autoFocus
+                onBlur={(e) => handleDueSave(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleDueSave((e.target as HTMLInputElement).value);
+                  if (e.key === "Escape") setEditingDue(false);
+                }}
+                className="text-xs border border-blue-300 rounded-lg px-2 py-0.5 bg-blue-50 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+              />
+              {task.dueDate && (
+                <button onClick={() => handleDueSave("")} className="text-slate-400 hover:text-red-500">
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingDue(true)}
+              className={cn(
+                "flex items-center gap-1 text-[13px] rounded-md px-1.5 py-0.5 transition-all hover:bg-slate-100 cursor-pointer",
+                isDue ? "text-[var(--error)] font-medium" : isDueToday ? "text-[var(--accent)] font-medium" : isDueSoon ? "text-slate-500" : "text-slate-400 hover:text-slate-600"
+              )}
+              title="기한 설정"
+            >
+              {isDue || isDueToday ? <AlertCircle size={11} /> : <Calendar size={11} />}
+              {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate.slice(0,10)}` : isDueToday ? `오늘 마감` : `마감 ${task.dueDate.slice(5,10)}`) : "기한 없음"}
+            </button>
+          )}
+
+          {(() => {
+            const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
+            return <span className="text-[12px] text-slate-400">{compact ? value.slice(5, 16) : `${label} ${value}`}</span>;
+          })()}
+          {task.completedAt && (
+            <span className="text-[12px] text-slate-400">완료 {formatDateTime(task.completedAt)}</span>
+          )}
+          {hasNoLinks && (
+            <span className="flex items-center gap-1 text-[12px] text-slate-400">
+              <Link2Off size={10} />연결 없음
+            </span>
+          )}
+        </div>
+
         {/* Slack 카드 본문 — 항상 1줄 미리보기, 클릭으로 펼치기 */}
         {task.sourceType === "slack_detected" && task.description && (
           <div
-            className="flex items-start gap-1.5 ml-4 mt-1.5 cursor-pointer group/desc"
+            className={cn("flex items-start gap-1.5 cursor-pointer group/desc", compact ? "mt-2" : "mt-2.5")}
             onClick={() => setExpanded(!expanded)}
           >
-            <MessageSquare size={10} className="flex-shrink-0 mt-0.5 text-slate-300" />
+            <MessageSquare size={11} className="flex-shrink-0 mt-0.5 text-slate-300" />
             <p className={cn(
-              "flex-1 text-xs text-slate-400 leading-relaxed min-w-0 transition-all",
+              "flex-1 text-[13px] text-slate-500 leading-relaxed min-w-0 transition-all",
               expanded ? "whitespace-pre-wrap break-words" : "truncate"
             )}>
               {task.description}
             </p>
             <span className="flex-shrink-0 mt-0.5 text-slate-300 group-hover/desc:text-slate-500 transition-colors">
-              {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+              {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
             </span>
           </div>
         )}
@@ -441,14 +431,14 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="text-xs text-slate-500 ml-4 mt-2 leading-relaxed"
+            className="text-[13px] text-slate-500 mt-2.5 leading-relaxed"
           >
             {task.description}
           </motion.p>
         )}
 
         {/* 상태 버튼 + 링크 */}
-        <div className={cn("flex flex-col gap-1.5 ml-4", compact ? "mt-2.5" : "mt-4")}>
+        <div className={cn("flex flex-col gap-1.5", compact ? "mt-3" : "mt-4")}>
           {/* 상태 버튼 */}
           <div className="flex gap-0.5 bg-slate-50 rounded-lg p-0.5 border border-slate-100 w-full">
             {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
@@ -458,7 +448,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                 disabled={isUpdating}
                 className={cn(
                   "flex-1 rounded-md font-medium transition-all cursor-pointer text-center",
-                  compact ? "px-1.5 py-1 text-[11px]" : "px-2.5 py-1.5 text-sm",
+                  compact ? "px-1.5 py-1.5 text-[12px]" : "px-2.5 py-2 text-[13px]",
                   task.status === s
                     ? cn(STATUS_COLORS[s], "text-white shadow-sm")
                     : "text-slate-500 hover:text-slate-700 hover:bg-white"
@@ -478,14 +468,14 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    "flex items-center gap-1 bg-[var(--accent-glow)] hover:bg-[var(--surface2)] border border-[var(--accent-border)] text-[var(--accent)] rounded-lg shadow-sm transition-colors min-w-0 max-w-full",
-                    compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
+                    "flex items-center gap-1.5 bg-[var(--accent-glow)] hover:bg-[var(--surface2)] border border-[var(--accent-border)] text-[var(--accent)] rounded-lg shadow-sm transition-colors min-w-0 max-w-full",
+                    compact ? "px-2 py-1 text-[12px]" : "px-2.5 py-1.5 text-[13px]"
                   )}
                 >
-                  <span className="w-3.5 h-3.5 rounded bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">J</span>
-                  <span className="truncate max-w-[100px]">{jiraLink.jiraIssueKey}</span>
-                  {jiraLink.jiraStatus && <span className="text-[var(--accent)]/60 truncate max-w-[70px] flex-shrink-0">· {jiraLink.jiraStatus}</span>}
-                  <ExternalLink size={9} className="opacity-50 flex-shrink-0" />
+                  <span className="w-4 h-4 rounded bg-[var(--accent)] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">J</span>
+                  <span className="truncate max-w-[120px] font-medium">{jiraLink.jiraIssueKey}</span>
+                  {jiraLink.jiraStatus && <span className="opacity-60 truncate max-w-[80px] flex-shrink-0">· {jiraLink.jiraStatus}</span>}
+                  <ExternalLink size={10} className="opacity-50 flex-shrink-0" />
                 </a>
               )}
               {slackLink && (
@@ -494,13 +484,13 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    "flex items-center gap-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 rounded-lg shadow-sm transition-colors flex-shrink-0",
-                    compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
+                    "flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 rounded-lg shadow-sm transition-colors flex-shrink-0",
+                    compact ? "px-2 py-1 text-[12px]" : "px-2.5 py-1.5 text-[13px]"
                   )}
                 >
-                  <MessageSquare size={10} />
+                  <MessageSquare size={11} />
                   Slack
-                  <ExternalLink size={9} className="opacity-50" />
+                  <ExternalLink size={10} className="opacity-50" />
                 </a>
               )}
             </div>
