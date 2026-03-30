@@ -743,11 +743,12 @@ export async function executeApprovedActions() {
             executedAt: now,
           }).where(eq(schema.actions.id, action.id));
 
-          // Slack 스레드에 할당 확인 리액션 추가
+          // Slack 스레드에 :확인: 리액션 추가
           if (channelId && threadTs && slack.isSlackConfigured()) {
-            slack.addReaction(channelId, threadTs, "두_눈").catch((e) => {
-              if (!String(e).includes("already_reacted")) {
-                console.warn("[Engine] Slack reaction failed:", e);
+            slack.addReaction(channelId, threadTs, "확인").catch((e) => {
+              const msg = String(e);
+              if (!msg.includes("already_reacted")) {
+                console.error("[Engine] Slack :확인: reaction failed:", msg, { channelId, threadTs });
               }
             });
           }

@@ -56,24 +56,27 @@ const STATUS_DOT: Record<string, string> = {
   cancelled: "bg-slate-200",
 };
 
-const PRIORITY_CONFIG: Record<string, { label: string; barColor: string; badgeClass: string; flagColor: string }> = {
+const PRIORITY_CONFIG: Record<string, { label: string; barColor: string; badgeClass: string; flagColor: string; cardAccent: string }> = {
   high: {
-    label: "높음",
+    label: "긴급",
     barColor: "bg-red-500",
-    badgeClass: "bg-red-50 text-red-600 border-red-200",
+    badgeClass: "bg-red-500 text-white border-red-500",
     flagColor: "text-red-500",
+    cardAccent: "ring-1 ring-red-200 bg-red-50/30",
   },
   medium: {
-    label: "중간",
+    label: "보통",
     barColor: "bg-[var(--accent)]",
-    badgeClass: "bg-[var(--accent-glow)] text-[var(--accent)] border-[var(--accent-border)]",
+    badgeClass: "bg-[var(--accent)] text-white border-[var(--accent)]",
     flagColor: "text-[var(--accent)]",
+    cardAccent: "",
   },
   low: {
     label: "낮음",
     barColor: "bg-slate-300",
-    badgeClass: "bg-slate-100 text-slate-400 border-slate-200",
+    badgeClass: "bg-slate-200 text-slate-500 border-slate-300",
     flagColor: "text-slate-400",
+    cardAccent: "",
   },
 };
 
@@ -254,11 +257,12 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
           ? "border-[var(--accent-border)]"
           : isDueSoon
           ? "border-slate-200"
-          : "border-[var(--border)] hover:border-slate-200 hover:shadow-[var(--shadow-card-hover)]"
+          : "border-[var(--border)] hover:border-slate-200 hover:shadow-[var(--shadow-card-hover)]",
+        !isDone && pCfg.cardAccent
       )}
     >
       {/* 왼쪽 우선순위 바 — 클릭해서 우선순위 변경 */}
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] overflow-hidden rounded-l-2xl">
+      <div className={cn("absolute left-0 top-0 bottom-0 overflow-hidden rounded-l-2xl", task.priority === "high" ? "w-[4px]" : "w-[3px]")}>
         <div className={cn("w-full h-full cursor-pointer", pCfg.barColor)} onClick={() => setShowPriorityMenu(true)} title="우선순위 변경" />
       </div>
 
@@ -280,12 +284,12 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
               <button
                 onClick={() => setShowPriorityMenu(!showPriorityMenu)}
                 className={cn(
-                  "flex items-center gap-1 font-semibold rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer text-[10px] px-1.5 py-0.5",
+                  "flex items-center gap-1 font-bold rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer text-[11px] px-2 py-1",
                   pCfg.badgeClass
                 )}
                 title="우선순위 변경"
               >
-                <Flag size={8} />
+                <Flag size={10} />
                 {pCfg.label}
               </button>
               {showPriorityMenu && (
