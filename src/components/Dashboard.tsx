@@ -281,22 +281,28 @@ export default function Dashboard() {
 
   // 마무리(EOD) 전송 전: 오늘 완료한 것 표시 / 전송 후: 전송 이후 완료한 것만 표시
   const kanbanDone = useMemo(() => {
+    const lastEodDate = workflowStatus?.lastEod?.date; // "YYYY-MM-DD" 형식
     const lastEodAt = workflowStatus?.lastEod?.createdAt;
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayIso = todayStart.toISOString();
-    // 오늘 EOD를 보냈는지 여부
-    const eodSentToday = lastEodAt ? lastEodAt >= todayIso : false;
+    const todayDateStr = todayStr(); // "YYYY-MM-DD" 로컬
+
+    // 오늘 EOD를 보냈는지: 날짜(YYYY-MM-DD) 기준으로 판단 (타임존 안전)
+    const eodSentToday = lastEodDate === todayDateStr;
 
     const base = tasks.filter((t) => {
       if (t.status !== "done") return false;
+      // completedAt 또는 createdAt에서 날짜 부분만 추출 (YYYY-MM-DD)
       const completedAt = t.completedAt ?? t.createdAt;
-      if (eodSentToday) {
-        // 오늘 마무리 이후에 완료한 것만
-        return completedAt > lastEodAt!;
+      const completedDate = completedAt.slice(0, 10);
+
+      if (eodSentToday && lastEodAt) {
+        // 오늘 마무리 이후에 완료한 것만: 타임스탬프 전체 비교
+        // DB의 datetime 형식 차이(공백 vs T)를 normalize
+        const normalizedCompleted = completedAt.replace(" ", "T");
+        const normalizedEod = lastEodAt.replace(" ", "T");
+        return normalizedCompleted > normalizedEod;
       }
-      // 마무리 전이면 오늘 완료한 것 전부
-      return completedAt >= todayIso;
+      // 마무리 전이면 오늘 완료한 것 전부 (날짜만 비교 — 타임존 안전)
+      return completedDate === todayDateStr;
     });
     return applyColumnFilters(base);
   }, [tasks, applyColumnFilters, workflowStatus]);
