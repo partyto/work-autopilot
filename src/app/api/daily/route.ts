@@ -4,6 +4,8 @@ import { eq, desc } from "drizzle-orm";
 import { runEndOfDay, runStartOfDay } from "@/lib/workflow";
 import { isWorkingDay, nextWorkingDay, prevWorkingDay, toKSTDateStr } from "@/lib/holidays";
 
+export const dynamic = "force-dynamic";
+
 /** 다음 워크플로 액션 및 예정 시각 계산 */
 function computeWorkflowStatus(
   lastEodDate: string | null,

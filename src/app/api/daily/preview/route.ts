@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { eq, and } from "drizzle-orm";
 import { toKSTDateStr, prevWorkingDay } from "@/lib/holidays";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/daily/preview?type=sod|eod
 // Slack 발송 없이 모달에 보여줄 데이터만 반환
 export async function GET(req: NextRequest) {

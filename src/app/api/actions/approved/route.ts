@@ -4,6 +4,8 @@ import { eq, inArray } from "drizzle-orm";
 import type { Action, Task, TaskLink } from "@/db/schema";
 import type { ActionStatus } from "@/db/types";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/actions/approved - 승인됐지만 아직 실행되지 않은 액션 조회
 export async function GET() {
   try {

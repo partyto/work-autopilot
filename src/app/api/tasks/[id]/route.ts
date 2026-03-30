@@ -7,6 +7,8 @@ import * as slack from "@/lib/integrations/slack";
 import { TODO_TO_JIRA } from "@/lib/status-mapping";
 import { isValidTaskStatus, isValidPriority } from "@/db/types";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/tasks/[id] - 단일 할일 조회
 export async function GET(
   _request: NextRequest,

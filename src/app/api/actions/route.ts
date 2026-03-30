@@ -5,6 +5,8 @@ import { generateId, nowLocal } from "@/lib/utils";
 import type { Action, Task } from "@/db/schema";
 import type { ActionStatus } from "@/db/types";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/actions - 액션 목록 조회
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

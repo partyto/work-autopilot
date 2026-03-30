@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
+export const dynamic = "force-dynamic";
+
 // PATCH /api/tasks/reorder
 // Body: { ids: string[] } — 표시 순서대로 정렬된 task ID 목록
 export async function PATCH(request: NextRequest) {

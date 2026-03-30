@@ -7,6 +7,8 @@ import type { ActionType, ActionStatus, TaskStatus, LinkType } from "@/db/types"
 import * as jira from "@/lib/integrations/jira";
 import * as gcal from "@/lib/integrations/gcal";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/tasks - 할일 목록 조회
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

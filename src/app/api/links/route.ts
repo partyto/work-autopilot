@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { generateId, nowLocal } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/links - TO-DO에 Jira/Slack 링크 추가
 export async function POST(request: NextRequest) {
   try {

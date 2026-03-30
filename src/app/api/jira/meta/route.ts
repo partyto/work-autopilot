@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as jira from "@/lib/integrations/jira";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   if (!jira.isJiraConfigured()) {
     return NextResponse.json({ error: "Jira not configured" }, { status: 400 });

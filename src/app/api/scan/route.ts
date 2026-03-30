@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runDailyScan, executeApprovedActions } from "@/lib/engine";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/scan - 수동 트리거 (대시보드 "지금 스캔" 버튼용)
 export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url);

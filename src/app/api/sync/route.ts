@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { eq, and } from "drizzle-orm";
 import { nowLocal, todayDate, generateId } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/sync - 동기화 상태 업데이트 (Scheduled Task에서 호출)
 // Jira/Slack 스캔 결과를 받아서 DB에 반영
 export async function POST(request: NextRequest) {

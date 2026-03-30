@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { nowLocal, generateId } from "@/lib/utils";
 import { executeApprovedActions } from "@/lib/engine";
 
+export const dynamic = "force-dynamic";
+
 // PATCH /api/actions/[id] - 액션 상태 변경 (승인/거절/실행완료)
 export async function PATCH(
   request: NextRequest,

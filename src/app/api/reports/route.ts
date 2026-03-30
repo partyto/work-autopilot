@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { eq, desc } from "drizzle-orm";
 import { generateId, nowLocal, todayDate } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/reports - 일일 리포트 목록 조회
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
