@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signature = req.headers.get("x-slack-signature");
     const timestamp = req.headers.get("x-slack-request-timestamp");
+    console.log("[interact] POST received, body length:", rawBody.length, "sig:", !!signature);
 
     if (!verifySlackSignature(signature, timestamp, rawBody)) {
       return NextResponse.json({ error: "invalid signature" }, { status: 401 });
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
     const params = new URLSearchParams(rawBody);
     const payload = JSON.parse(params.get("payload") || "{}");
     const { type, actions, channel, message, user } = payload;
+    console.log("[interact] type:", type, "action:", actions?.[0]?.action_id, "channel:", channel?.id, "ts:", message?.ts);
 
     if (type !== "block_actions" || !actions?.length) {
       return NextResponse.json({ ok: true });
