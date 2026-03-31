@@ -352,6 +352,35 @@ export default function Dashboard() {
           <ConnStatus label="Scheduler" connected={scanStatus?.scheduler} />
         </div>
         <div className="flex items-center gap-2">
+          {/* 하루 시작 */}
+          <button
+            onClick={() => handleWorkflow("sod")}
+            disabled={!!workflowRunning}
+            className={cn(
+              "flex items-center gap-1 px-3 py-1.5 text-[13px] font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50",
+              workflowStatus?.nextAction === "sod"
+                ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-dim)]"
+                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+            )}
+          >
+            <Sunrise size={12} />
+            {workflowRunning === "sod" ? "처리중..." : "시작"}
+          </button>
+          {/* 하루 마무리 */}
+          <button
+            onClick={() => handleWorkflow("eod")}
+            disabled={!!workflowRunning}
+            className={cn(
+              "flex items-center gap-1 px-3 py-1.5 text-[13px] font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50",
+              workflowStatus?.nextAction === "eod"
+                ? "bg-[var(--foreground)] text-white hover:bg-slate-800"
+                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+            )}
+          >
+            <Sunset size={12} />
+            {workflowRunning === "eod" ? "처리중..." : "마무리"}
+          </button>
+          <div className="w-px h-5 bg-slate-200" />
           <TaskForm onCreated={handleRefreshAll} />
           <button
             onClick={handleScanNow}
@@ -379,13 +408,6 @@ export default function Dashboard() {
       {/* ── 대시보드 뷰 ── */}
       {(!activeHash || activeHash === "dashboard") && (
         <>
-          {/* 하루 플로우 — 컴팩트 스트립 */}
-          <CompactWorkflowStrip
-            status={workflowStatus}
-            running={workflowRunning}
-            onTrigger={handleWorkflow}
-          />
-
           {/* 상태 필터 chips */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-semibold text-slate-400 mr-1">필터</span>

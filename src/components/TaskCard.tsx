@@ -438,8 +438,8 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             </div>
           </div>
 
-          {/* 우측: 상태 드롭다운 + 삭제 버튼 */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          {/* 우측: 상태 드롭다운 (상) + 삭제 버튼 (하) */}
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
             <div className="relative" ref={statusMenuRef}>
               <button
                 onClick={() => setShowStatusMenu(!showStatusMenu)}
@@ -470,7 +470,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
               onClick={handleDelete}
               className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer opacity-0 group-hover:opacity-100"
             >
-              <Trash2 size={12} />
+              <Trash2 size={11} />
             </button>
           </div>
         </div>
