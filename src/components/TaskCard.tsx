@@ -438,40 +438,40 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             </div>
           </div>
 
-          {/* 우측: 상태 드롭다운 (상) + 삭제 버튼 (하) */}
-          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-            <div className="relative" ref={statusMenuRef}>
-              <button
-                onClick={() => setShowStatusMenu(!showStatusMenu)}
-                disabled={isUpdating}
-                className={statusBtnClass}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-white/70 flex-shrink-0" />
-                {STATUS_LABELS[task.status]}
-                <ChevronDown size={9} className={cn("transition-transform", showStatusMenu ? "rotate-180" : "")} />
-              </button>
-              {showStatusMenu && (
-                <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-lg border border-slate-200 py-1 min-w-[110px]">
-                  {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => handleStatusChange(s)}
-                      className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-slate-50 transition-colors cursor-pointer",
-                        task.status === s ? "font-semibold text-slate-800" : "text-slate-600")}
-                    >
-                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[s])} />
-                      {STATUS_LABELS[s]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* 우측: 상태 드롭다운 */}
+          <div className="relative flex-shrink-0" ref={statusMenuRef}>
             <button
-              onClick={handleDelete}
-              className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+              onClick={() => setShowStatusMenu(!showStatusMenu)}
+              disabled={isUpdating}
+              className={statusBtnClass}
             >
-              <Trash2 size={11} />
+              <span className="w-1.5 h-1.5 rounded-full bg-white/70 flex-shrink-0" />
+              {STATUS_LABELS[task.status]}
+              <ChevronDown size={9} className={cn("transition-transform", showStatusMenu ? "rotate-180" : "")} />
             </button>
+            {showStatusMenu && (
+              <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-lg border border-slate-200 py-1 min-w-[110px]">
+                {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleStatusChange(s)}
+                    className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-slate-50 transition-colors cursor-pointer",
+                      task.status === s ? "font-semibold text-slate-800" : "text-slate-600")}
+                  >
+                    <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[s])} />
+                    {STATUS_LABELS[s]}
+                  </button>
+                ))}
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  onClick={() => { setShowStatusMenu(false); handleDelete(); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={11} className="flex-shrink-0" />
+                  삭제
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
