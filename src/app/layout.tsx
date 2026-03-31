@@ -26,7 +26,7 @@ export default function RootLayout({
         style={{ fontFamily: "'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
       >
         <SidebarLayout>
-          <main className="px-10 py-6 max-w-[1600px] mx-auto">
+          <main className="px-8 py-6 w-full">
             {children}
           </main>
         </SidebarLayout>
