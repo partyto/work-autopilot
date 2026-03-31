@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import "./globals.css";
-import SidebarNav from "@/components/SidebarNav";
+import SidebarLayout from "@/components/SidebarLayout";
 
 export const metadata: Metadata = {
   title: "Work Pavlotrasche",
@@ -25,13 +25,11 @@ export default function RootLayout({
         className="min-h-[100dvh] flex bg-[var(--background)]"
         style={{ fontFamily: "'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
       >
-        <SidebarNav />
-
-        <div className="flex-1 ml-[210px] min-h-screen">
+        <SidebarLayout>
           <main className="px-8 py-6 max-w-[1300px] mx-auto">
             {children}
           </main>
-        </div>
+        </SidebarLayout>
 
         <Toaster
           position="bottom-right"

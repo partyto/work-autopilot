@@ -59,12 +59,24 @@ const NAV_BOTTOM = [
   },
 ];
 
-function NavItem({ item, isActive, onClick }: { item: { hash: string; label: string; icon: React.ReactNode }; isActive: boolean; onClick: (hash: string) => void }) {
+function NavItem({
+  item,
+  isActive,
+  onClick,
+  collapsed,
+}: {
+  item: { hash: string; label: string; icon: React.ReactNode };
+  isActive: boolean;
+  onClick: (hash: string) => void;
+  collapsed: boolean;
+}) {
   return (
     <button
       onClick={() => onClick(item.hash)}
+      title={collapsed ? item.label : undefined}
       className={cn(
-        "w-full flex items-center gap-2.5 rounded-xl text-[13px] transition-all duration-150 px-3 py-2.5 group cursor-pointer text-left",
+        "w-full flex items-center rounded-xl text-[13px] transition-all duration-150 group cursor-pointer text-left",
+        collapsed ? "justify-center px-0 py-2.5" : "gap-2.5 px-3 py-2.5",
         isActive
           ? "bg-[var(--accent-glow)] text-[var(--accent)] font-semibold"
           : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
@@ -73,13 +85,41 @@ function NavItem({ item, isActive, onClick }: { item: { hash: string; label: str
       <span className={cn("flex-shrink-0", isActive ? "text-[var(--accent)]" : "text-slate-400 group-hover:text-slate-500")}>
         {item.icon}
       </span>
-      <span className="truncate">{item.label}</span>
-      {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />}
+      {!collapsed && (
+        <>
+          <span className="truncate">{item.label}</span>
+          {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />}
+        </>
+      )}
     </button>
   );
 }
 
-export default function SidebarNav() {
+// 토글 아이콘 (화살표)
+function ChevronIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("transition-transform duration-300", collapsed ? "rotate-0" : "rotate-180")}
+    >
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
+interface SidebarNavProps {
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export default function SidebarNav({ collapsed = false, onToggle }: SidebarNavProps) {
   const [activeHash, setActiveHash] = useState("");
 
   useEffect(() => {
@@ -96,60 +136,99 @@ export default function SidebarNav() {
     const newHash = hash || "";
     window.location.hash = newHash;
     setActiveHash(newHash);
-    // hashchange 이벤트를 명시적으로 발생시켜 Dashboard가 감지하도록
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   }, []);
 
   return (
-    <aside className="h-screen w-[210px] fixed left-0 top-0 flex flex-col bg-white border-r border-slate-100 z-40">
-      {/* 로고 */}
-      <div className="px-4 py-4 flex items-center gap-2.5 border-b border-slate-100 flex-shrink-0">
+    <aside
+      className={cn(
+        "h-screen fixed left-0 top-0 flex flex-col bg-white border-r border-slate-100 z-40 transition-all duration-300 overflow-hidden",
+        collapsed ? "w-[60px]" : "w-[210px]"
+      )}
+    >
+      {/* 로고 + 토글 버튼 */}
+      <div className={cn(
+        "py-4 flex items-center border-b border-slate-100 flex-shrink-0 transition-all duration-300",
+        collapsed ? "px-3 justify-center" : "px-4 gap-2.5"
+      )}>
         <div className="w-8 h-8 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0">
           <img src="/icon-192.png" alt="Pavlotrasche" className="w-5 h-5 rounded-lg" />
         </div>
-        <div>
-          <h1 className="text-[13px] font-extrabold text-[var(--foreground)] leading-tight tracking-tight">Pavlotrasche</h1>
-          <p className="text-[9px] uppercase tracking-widest text-[var(--accent)] font-bold opacity-60">Amethyst</p>
-        </div>
+        {!collapsed && (
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[13px] font-extrabold text-[var(--foreground)] leading-tight tracking-tight">Pavlotrasche</h1>
+            <p className="text-[9px] uppercase tracking-widest text-[var(--accent)] font-bold opacity-60">Amethyst</p>
+          </div>
+        )}
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            title={collapsed ? "사이드바 열기" : "사이드바 접기"}
+            className={cn(
+              "flex-shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all cursor-pointer",
+              collapsed && "mt-0"
+            )}
+          >
+            <ChevronIcon collapsed={collapsed} />
+          </button>
+        )}
       </div>
 
       {/* 네비게이션 */}
-      <nav className="flex-1 px-3 py-3 space-y-5 overflow-y-auto">
+      <nav className={cn("flex-1 py-3 space-y-5 overflow-y-auto", collapsed ? "px-1.5" : "px-3")}>
         {/* 메인 */}
         <div className="space-y-0.5">
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">메인</p>
+          {!collapsed && (
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">메인</p>
+          )}
           {NAV_MAIN.map((item) => (
-            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} />
+            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} collapsed={collapsed} />
           ))}
         </div>
+
+        {!collapsed && <div className="border-t border-slate-100" />}
+        {collapsed && <div className="border-t border-slate-100 mx-1" />}
 
         {/* 이력 */}
         <div className="space-y-0.5">
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">이력</p>
+          {!collapsed && (
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">이력</p>
+          )}
           {NAV_HISTORY.map((item) => (
-            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} />
+            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} collapsed={collapsed} />
           ))}
         </div>
 
+        {!collapsed && <div className="border-t border-slate-100" />}
+        {collapsed && <div className="border-t border-slate-100 mx-1" />}
+
         {/* 기타 */}
         <div className="space-y-0.5">
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">기타</p>
+          {!collapsed && (
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold px-3 pb-1.5">기타</p>
+          )}
           {NAV_BOTTOM.map((item) => (
-            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} />
+            <NavItem key={item.hash} item={item} isActive={activeHash === item.hash} onClick={handleNav} collapsed={collapsed} />
           ))}
         </div>
       </nav>
 
       {/* 유저 프로필 */}
-      <div className="px-3 pb-4 pt-2 border-t border-slate-100 flex-shrink-0">
-        <div className="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 rounded-xl">
-          <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">주</div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold text-slate-700 truncate">주현우</p>
-            <p className="text-[10px] text-slate-400">B2B서비스</p>
+      <div className={cn("pb-4 pt-2 border-t border-slate-100 flex-shrink-0", collapsed ? "px-1.5" : "px-3")}>
+        {collapsed ? (
+          <div className="flex justify-center py-1">
+            <div className="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white text-[11px] font-bold" title="주현우 · B2B서비스">주</div>
           </div>
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-soft-pulse flex-shrink-0" />
-        </div>
+        ) : (
+          <div className="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 rounded-xl">
+            <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">주</div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold text-slate-700 truncate">주현우</p>
+              <p className="text-[10px] text-slate-400">B2B서비스</p>
+            </div>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-soft-pulse flex-shrink-0" />
+          </div>
+        )}
       </div>
     </aside>
   );
