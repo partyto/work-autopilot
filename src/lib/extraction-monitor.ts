@@ -26,14 +26,16 @@ function parseShopSeq(text: string): string {
   return nums ? nums.join(",") : "";
 }
 
-export async function runExtractionMonitor() {
+export async function runExtractionMonitor(overrideChannel?: string) {
   const state = getDutyState();
   const duty = getCurrentDuty(state);
+  const targetChannel = overrideChannel || HELP_CHANNEL;
+  const isTest = !!overrideChannel;
 
-  // 채널 히스토리 조회 (last_checked_ts 이후)
+  // 채널 히스토리 조회 (last_checked_ts 이후, 테스트 채널이면 전체 조회)
   const messages = await getChannelHistory(
-    HELP_CHANNEL,
-    state.last_checked_ts || undefined,
+    targetChannel,
+    isTest ? undefined : (state.last_checked_ts || undefined),
     100,
   );
 
@@ -55,17 +57,17 @@ export async function runExtractionMonitor() {
 
     try {
       // 스레드 전체 읽기
-      const thread = await getThreadReplies(HELP_CHANNEL, threadTs);
+      const thread = await getThreadReplies(targetChannel, threadTs);
       const fullText = thread.map((m: any) => m.text || "").join("\n");
 
       // JIRA 티켓 파싱
       const ticketKey = parseJiraTicket(fullText) || "SCR-?";
       const shopSeq = parseShopSeq(fullText);
-      const permalink = await getPermalink(HELP_CHANNEL, threadTs);
+      const permalink = await getPermalink(targetChannel, threadTs);
 
-      // 1) #help-정보보안 스레드에 당번 멘션 답글
+      // 1) 스레드에 당번 멘션 답글
       await slackApi("chat.postMessage", {
-        channel: HELP_CHANNEL,
+        channel: targetChannel,
         thread_ts: threadTs,
         text: `<@${duty.slack_id}> 확인 부탁드립니다! :eyes:`,
         mrkdwn: true,
@@ -76,7 +78,7 @@ export async function runExtractionMonitor() {
         ticket_key: ticketKey,
         shop_seq: shopSeq,
         thread_ts: threadTs,
-        channel: HELP_CHANNEL,
+        channel: targetChannel,
         permalink,
       });
 
