@@ -579,9 +579,9 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
         </div>
 
         {/* 하단: 링크 영역 */}
-        <div className={cn("flex items-center gap-1.5 flex-wrap", compact ? "mt-2" : "mt-2.5")}>
+        <div className={cn("flex items-center gap-1.5 overflow-hidden", compact ? "mt-2" : "mt-2.5")}>
           <div className={cn(
-            "flex items-center gap-1.5 flex-wrap w-full transition-opacity",
+            "flex items-center gap-1.5 w-full overflow-hidden transition-opacity",
             !jiraLink && !slackLink && !urlLink && !editingJira && !editingSlack && !editingUrl ? "opacity-0 group-hover:opacity-100" : ""
           )}>
             {/* Jira */}
