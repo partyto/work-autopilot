@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { runDailyScan, executeApprovedActions } from "./engine";
 import { runEndOfDay, runStartOfDay } from "./workflow";
 import { isWorkingDay } from "./holidays";
+import { runExtractionMonitor } from "./extraction-monitor";
 
 let initialized = false;
 
@@ -54,5 +55,17 @@ export function initScheduler() {
     timezone: "Asia/Seoul",
   });
 
-  console.log("[Scheduler] Initialized — Auto scan: every 30min (Mon-Fri), SOD: 10:00 KST, EOD: 19:00 KST");
+  // 15분 간격 — #help-정보보안 모니터링 (평일 업무시간 09:00~19:00)
+  cron.schedule("*/15 9-19 * * 1-5", async () => {
+    if (!isWorkingDay(new Date())) return;
+    try {
+      await runExtractionMonitor();
+    } catch (error) {
+      console.error("[Scheduler] ExtractionMonitor failed:", error);
+    }
+  }, {
+    timezone: "Asia/Seoul",
+  });
+
+  console.log("[Scheduler] Initialized — Auto scan: every 30min (Mon-Fri), SOD: 10:00 KST, EOD: 19:00 KST, ExtractionMonitor: every 15min 09-19 KST");
 }

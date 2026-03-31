@@ -152,4 +152,23 @@ export function isSlackConfigured(): boolean {
   return !!SLACK_TOKEN;
 }
 
+// #help-정보보안 등 채널 히스토리 조회
+export async function getChannelHistory(channelId: string, oldest?: string, limit = 50) {
+  const params: Record<string, any> = { channel: channelId, limit };
+  if (oldest) params.oldest = oldest;
+  const data = await slackApi("conversations.history", params);
+  return (data.messages || []) as any[];
+}
+
+// 메시지 permalink 조회
+export async function getPermalink(channelId: string, messageTs: string): Promise<string> {
+  await throttle();
+  const res = await fetch(
+    `https://slack.com/api/chat.getPermalink?channel=${channelId}&message_ts=${messageTs}`,
+    { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+  );
+  const data = await res.json();
+  return data.permalink || "";
+}
+
 export { SLACK_USER_ID, slackApi };

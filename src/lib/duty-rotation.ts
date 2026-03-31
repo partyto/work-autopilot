@@ -19,6 +19,8 @@ export interface DutyState {
   start_date: string;
   start_index: number;
   vacation_overrides: Record<string, number>; // week -> replacement index
+  last_checked_ts: string | null;
+  processed_threads: string[];
   sql_templates: {
     marketing: string;
     notice: string;
@@ -39,6 +41,8 @@ const DEFAULT_STATE: DutyState = {
   start_date: "2026-03-30",
   start_index: 3,
   vacation_overrides: {},
+  last_checked_ts: null,
+  processed_threads: [],
   sql_templates: {
     marketing: `select distinct tsm.shop_seq, tsm.shop_name as '매장명', AES_DECRYPT(FROM_BASE64(tse.enc_employee_info), '암호확인중') as '담당자(대표연락처)명', AES_DECRYPT(FROM_BASE64(enc_employee_contact_info), 'tablenote414!@#$') as '담당자 전화번호',
 tse.can_send_sms_yn as '문자 발신 가능 번호', tse.memo as '메모'
