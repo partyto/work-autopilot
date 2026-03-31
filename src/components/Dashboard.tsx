@@ -531,7 +531,7 @@ export default function Dashboard() {
           {isLoading ? (
             <LoadingSpinner />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
               <KanbanColumn title="대기" tasks={kanbanPending} onUpdate={handleRefreshAll} dotColor="bg-slate-300" headerColor="text-slate-500" emptyLabel="대기 중인 할일 없음" />
               <KanbanColumn title="진행 중 · IN-QA" tasks={kanbanActive} onUpdate={handleRefreshAll} dotColor="bg-[var(--accent)]" headerColor="text-[var(--accent)]" emptyLabel="진행 중인 할일 없음" />
               <KanbanColumn title="완료" tasks={kanbanDone} onUpdate={handleRefreshAll} dotColor="bg-slate-400" headerColor="text-slate-500" emptyLabel="완료된 할일 없음" />

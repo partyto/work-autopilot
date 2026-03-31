@@ -95,24 +95,6 @@ function NavItem({
   );
 }
 
-// 토글 아이콘 (화살표)
-function ChevronIcon({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn("transition-transform duration-300", collapsed ? "rotate-0" : "rotate-180")}
-    >
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
 
 interface SidebarNavProps {
   collapsed?: boolean;
@@ -146,31 +128,23 @@ export default function SidebarNav({ collapsed = false, onToggle }: SidebarNavPr
         collapsed ? "w-[60px]" : "w-[210px]"
       )}
     >
-      {/* 로고 + 토글 버튼 */}
+      {/* 로고 — 클릭해서 토글 */}
       <div className={cn(
         "py-4 flex items-center border-b border-slate-100 flex-shrink-0 transition-all duration-300",
         collapsed ? "px-3 justify-center" : "px-4 gap-2.5"
       )}>
-        <div className="w-8 h-8 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0">
+        <button
+          onClick={onToggle}
+          title={collapsed ? "사이드바 열기" : "사이드바 접기"}
+          className="w-8 h-8 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
+        >
           <img src="/icon-192.png" alt="Pavlotrasche" className="w-5 h-5 rounded-lg" />
-        </div>
+        </button>
         {!collapsed && (
           <div className="flex-1 min-w-0">
             <h1 className="text-[13px] font-extrabold text-[var(--foreground)] leading-tight tracking-tight">Pavlotrasche</h1>
             <p className="text-[9px] uppercase tracking-widest text-[var(--accent)] font-bold opacity-60">Amethyst</p>
           </div>
-        )}
-        {onToggle && (
-          <button
-            onClick={onToggle}
-            title={collapsed ? "사이드바 열기" : "사이드바 접기"}
-            className={cn(
-              "flex-shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all cursor-pointer",
-              collapsed && "mt-0"
-            )}
-          >
-            <ChevronIcon collapsed={collapsed} />
-          </button>
         )}
       </div>
 
