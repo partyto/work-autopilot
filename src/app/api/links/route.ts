@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { generateId, nowLocal } from "@/lib/utils";
+import { getIssueStatus } from "@/lib/integrations/jira";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +20,17 @@ export async function POST(request: NextRequest) {
     const linkId = generateId();
 
     if (linkType === "jira" && jiraIssueKey) {
+      const key = jiraIssueKey.trim().toUpperCase();
+      const jiraStatus = await getIssueStatus(key);
       await db.insert(schema.taskLinks).values({
         id: linkId,
         taskId,
         linkType: "jira",
-        jiraIssueKey: jiraIssueKey.trim().toUpperCase(),
-        jiraIssueUrl: `https://catchtable.atlassian.net/browse/${jiraIssueKey.trim().toUpperCase()}`,
-        jiraProjectKey: jiraIssueKey.split("-")[0],
+        jiraIssueKey: key,
+        jiraIssueUrl: `https://catchtable.atlassian.net/browse/${key}`,
+        jiraProjectKey: key.split("-")[0],
+        jiraStatus: jiraStatus ?? null,
+        lastSyncedAt: now,
         createdAt: now,
       });
     } else if (linkType === "slack_thread") {
