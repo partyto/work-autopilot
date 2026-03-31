@@ -536,7 +536,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="text-[13px] text-slate-500 mt-2.5 leading-relaxed"
+            className="text-[13px] text-slate-500 mt-2.5 leading-relaxed break-all overflow-hidden"
           >
             {task.description}
           </motion.p>
