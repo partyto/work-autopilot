@@ -56,7 +56,6 @@ export async function runExtractionMonitor(overrideChannel?: string) {
     if (newProcessed.includes(threadTs)) continue;
 
     try {
-      console.log(`[ExtractionMonitor] Processing thread ${threadTs}`);
 
       // 스레드 전체 읽기 (실패 시 메시지 원문으로 폴백)
       let fullText = msg.text || "";
@@ -70,10 +69,8 @@ export async function runExtractionMonitor(overrideChannel?: string) {
       // JIRA 티켓 파싱
       const ticketKey = parseJiraTicket(fullText) || "SCR-?";
       const shopSeq = parseShopSeq(fullText);
-      console.log(`[ExtractionMonitor] ticket=${ticketKey} shop=${shopSeq}`);
 
       const permalink = await getPermalink(targetChannel, threadTs);
-      console.log(`[ExtractionMonitor] permalink ok`);
 
       // 1) 스레드에 당번 멘션 답글
       await slackApi("chat.postMessage", {
@@ -82,7 +79,6 @@ export async function runExtractionMonitor(overrideChannel?: string) {
         text: `<@${duty.slack_id}> 확인 부탁드립니다! :eyes:`,
         mrkdwn: true,
       });
-      console.log(`[ExtractionMonitor] thread reply sent`);
 
       // 2) 당번 PM에게 추출 유형 선택 버튼 DM
       const metadata = JSON.stringify({
@@ -128,7 +124,6 @@ export async function runExtractionMonitor(overrideChannel?: string) {
           ],
         },
       ], `${ticketKey} 추출 요청 — 유형을 선택해주세요`);
-      console.log(`[ExtractionMonitor] DM sent to ${duty.slack_id}`);
 
       newProcessed.push(threadTs);
       console.log(`[ExtractionMonitor] Processed thread ${threadTs} (${ticketKey})`);
