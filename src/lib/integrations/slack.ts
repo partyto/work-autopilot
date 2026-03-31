@@ -112,9 +112,44 @@ export async function getThreadReplies(channelId: string, threadTs: string) {
   return data.messages || [];
 }
 
+// Block Kit 메시지 전송
+export async function postBlockMessage(
+  channel: string,
+  blocks: any[],
+  text: string,
+  metadata?: Record<string, any>,
+) {
+  const body: Record<string, any> = { channel, blocks, text, mrkdwn: true };
+  if (metadata) body.metadata = { event_type: "duty_bot", event_payload: metadata };
+  return slackApi("chat.postMessage", body);
+}
+
+// Block Kit DM 전송
+export async function sendBlockDM(
+  userId: string,
+  blocks: any[],
+  text: string,
+  metadata?: Record<string, any>,
+) {
+  const openRes = await slackApi("conversations.open", { users: userId });
+  const channelId = openRes.channel.id;
+  const msgRes = await postBlockMessage(channelId, blocks, text, metadata);
+  return { channelId, ts: msgRes.ts };
+}
+
+// 기존 메시지 업데이트 (버튼 제거/변경용)
+export async function updateMessage(
+  channel: string,
+  ts: string,
+  blocks: any[],
+  text: string,
+) {
+  return slackApi("chat.update", { channel, ts, blocks, text, mrkdwn: true });
+}
+
 // Slack 설정 유효성 체크
 export function isSlackConfigured(): boolean {
   return !!SLACK_TOKEN;
 }
 
-export { SLACK_USER_ID };
+export { SLACK_USER_ID, slackApi };

@@ -142,6 +142,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
   const [titleValue, setTitleValue] = useState(task.title);
   const [editingDue, setEditingDue] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [editingJira, setEditingJira] = useState(false);
   const [jiraKeyValue, setJiraKeyValue] = useState("");
   const [editingSlack, setEditingSlack] = useState(false);
@@ -194,6 +195,20 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
 
   const handleStatusChange = async (newStatus: string) => {
     if (task.status === newStatus) return;
+    if (newStatus === "cancelled") {
+      setConfirmModal({
+        message: "이 할일을 취소 처리하시겠습니까?",
+        onConfirm: () => {
+          setConfirmModal(null);
+          toast.promise(patchTask({ status: newStatus }), {
+            loading: "상태 변경 중...",
+            success: `상태: ${STATUS_LABELS[newStatus]}`,
+            error: "상태 변경 실패",
+          });
+        },
+      });
+      return;
+    }
     toast.promise(patchTask({ status: newStatus }), {
       loading: "상태 변경 중...",
       success: `상태: ${STATUS_LABELS[newStatus]}`,
@@ -221,25 +236,36 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
     patchTask({ dueDate: val || null });
   };
 
-  const handleDelete = async () => {
-    if (!confirm("정말 삭제하시겠습니까?")) return;
-    try {
-      await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
-      toast.success("할일 삭제됨");
-      onUpdate();
-    } catch {
-      toast.error("삭제 실패");
-    }
+  const handleDelete = () => {
+    setConfirmModal({
+      message: "이 할일을 삭제하시겠습니까? 되돌릴 수 없습니다.",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+          toast.success("할일 삭제됨");
+          onUpdate();
+        } catch {
+          toast.error("삭제 실패");
+        }
+      },
+    });
   };
 
   // --- 링크 추가/수정/삭제 ---
-  const handleDeleteLink = async (linkId: string) => {
-    try {
-      await fetch(`/api/links?id=${linkId}`, { method: "DELETE" });
-      onUpdate();
-    } catch {
-      toast.error("링크 삭제 실패");
-    }
+  const handleDeleteLink = (linkId: string, label: string) => {
+    setConfirmModal({
+      message: `${label} 링크를 삭제하시겠습니까?`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await fetch(`/api/links?id=${linkId}`, { method: "DELETE" });
+          onUpdate();
+        } catch {
+          toast.error("링크 삭제 실패");
+        }
+      },
+    });
   };
 
   const handleSaveJiraLink = async () => {
@@ -575,7 +601,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                 </a>
                 <div className="flex items-center gap-0.5 opacity-0 group-hover/jira:opacity-100 transition-opacity">
                   <button onClick={() => { setJiraKeyValue(jiraLink.jiraIssueKey || ""); setEditingJira(true); }} className="p-0.5 text-slate-400 hover:text-[var(--accent)] cursor-pointer" title="수정"><Pencil size={10} /></button>
-                  <button onClick={() => handleDeleteLink(jiraLink.id)} className="p-0.5 text-slate-400 hover:text-red-500 cursor-pointer" title="삭제"><X size={10} /></button>
+                  <button onClick={() => handleDeleteLink(jiraLink.id, "Jira")} className="p-0.5 text-slate-400 hover:text-red-500 cursor-pointer" title="삭제"><X size={10} /></button>
                 </div>
               </div>
             ) : (
@@ -621,7 +647,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                 </a>
                 <div className="flex items-center gap-0.5 opacity-0 group-hover/slack:opacity-100 transition-opacity">
                   <button onClick={() => { setSlackUrlValue(slackLink.slackThreadUrl || ""); setEditingSlack(true); }} className="p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer" title="수정"><Pencil size={10} /></button>
-                  <button onClick={() => handleDeleteLink(slackLink.id)} className="p-0.5 text-slate-400 hover:text-red-500 cursor-pointer" title="삭제"><X size={10} /></button>
+                  <button onClick={() => handleDeleteLink(slackLink.id, "Slack")} className="p-0.5 text-slate-400 hover:text-red-500 cursor-pointer" title="삭제"><X size={10} /></button>
                 </div>
               </div>
             ) : (
@@ -635,6 +661,38 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
           </div>
         </div>
       </div>
+
+      {/* 확인 모달 */}
+      {confirmModal && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center"
+          onClick={() => setConfirmModal(null)}
+        >
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 w-full max-w-[320px] mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-[15px] font-medium text-slate-800 leading-snug tracking-tight word-break-keep-all mb-5">
+              {confirmModal.message}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 text-[13px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className="px-4 py-2 text-[13px] font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
