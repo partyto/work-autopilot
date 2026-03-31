@@ -8,12 +8,13 @@ import {
   ExternalLink,
   MessageSquare,
   AlertCircle,
-  Link2Off,
   ChevronDown,
   ChevronUp,
   Flag,
   Calendar,
   X,
+  Plus,
+  Pencil,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, cn } from "@/lib/utils";
 
@@ -141,12 +142,26 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
   const [titleValue, setTitleValue] = useState(task.title);
   const [editingDue, setEditingDue] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
+  const [editingJira, setEditingJira] = useState(false);
+  const [jiraKeyValue, setJiraKeyValue] = useState("");
+  const [editingSlack, setEditingSlack] = useState(false);
+  const [slackUrlValue, setSlackUrlValue] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const jiraInputRef = useRef<HTMLInputElement>(null);
+  const slackInputRef = useRef<HTMLInputElement>(null);
   const priorityMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.select();
   }, [editingTitle]);
+
+  useEffect(() => {
+    if (editingJira) jiraInputRef.current?.focus();
+  }, [editingJira]);
+
+  useEffect(() => {
+    if (editingSlack) slackInputRef.current?.focus();
+  }, [editingSlack]);
 
   // 우선순위 메뉴 외부 클릭 닫기
   useEffect(() => {
@@ -217,6 +232,72 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
     }
   };
 
+  // --- 링크 추가/수정/삭제 ---
+  const handleDeleteLink = async (linkId: string) => {
+    try {
+      await fetch(`/api/links?id=${linkId}`, { method: "DELETE" });
+      onUpdate();
+    } catch {
+      toast.error("링크 삭제 실패");
+    }
+  };
+
+  const handleSaveJiraLink = async () => {
+    setEditingJira(false);
+    const key = jiraKeyValue.trim().toUpperCase();
+    if (!key) return;
+    try {
+      // 기존 jira 링크가 있으면 먼저 삭제
+      const existing = task.links?.find((l) => l.linkType === "jira");
+      if (existing) await fetch(`/api/links?id=${existing.id}`, { method: "DELETE" });
+      await fetch("/api/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId: task.id, linkType: "jira", jiraIssueKey: key }),
+      });
+      toast.success(`Jira ${key} 연결됨`);
+      onUpdate();
+    } catch {
+      toast.error("Jira 링크 저장 실패");
+    }
+  };
+
+  // Slack URL 파싱: https://xxx.slack.com/archives/CXXX/pXXXXXXXXXX
+  const parseSlackUrl = (url: string) => {
+    const m = url.match(/archives\/([A-Z0-9]+)\/p(\d+)/);
+    if (!m) return null;
+    const channelId = m[1];
+    const raw = m[2];
+    const threadTs = raw.slice(0, 10) + "." + raw.slice(10);
+    return { channelId, threadTs };
+  };
+
+  const handleSaveSlackLink = async () => {
+    setEditingSlack(false);
+    const url = slackUrlValue.trim();
+    if (!url) return;
+    const parsed = parseSlackUrl(url);
+    try {
+      const existing = task.links?.find((l) => l.linkType === "slack_thread");
+      if (existing) await fetch(`/api/links?id=${existing.id}`, { method: "DELETE" });
+      await fetch("/api/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId: task.id,
+          linkType: "slack_thread",
+          slackThreadUrl: url,
+          slackChannelId: parsed?.channelId || null,
+          slackThreadTs: parsed?.threadTs || null,
+        }),
+      });
+      toast.success("Slack 스레드 연결됨");
+      onUpdate();
+    } catch {
+      toast.error("Slack 링크 저장 실패");
+    }
+  };
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const isDueToday =
     task.dueDate &&
@@ -240,7 +321,6 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
 
   const jiraLink = task.links?.find((l) => l.linkType === "jira");
   const slackLink = task.links?.find((l) => l.linkType === "slack_thread");
-  const hasNoLinks = !jiraLink && !slackLink;
   const isDone = task.status === "done";
   const pCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.low;
 
@@ -403,11 +483,6 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
           {task.completedAt && (
             <span className="text-[12px] text-slate-400">완료 {formatDateTime(task.completedAt)}</span>
           )}
-          {hasNoLinks && (
-            <span className="flex items-center gap-1 text-[12px] text-slate-400">
-              <Link2Off size={10} />연결 없음
-            </span>
-          )}
         </div>
 
         {/* Slack 카드 본문 — 항상 1줄 미리보기, 클릭으로 펼치기 */}
@@ -463,10 +538,27 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             ))}
           </div>
 
-          {/* Jira / Slack 링크 */}
-          {(jiraLink || slackLink) && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {jiraLink && (
+          {/* Jira / Slack 링크 — 추가/수정/삭제 가능 */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Jira 링크 */}
+            {editingJira ? (
+              <div className="flex items-center gap-1">
+                <span className="w-4 h-4 rounded bg-[var(--accent)] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">J</span>
+                <input
+                  ref={jiraInputRef}
+                  value={jiraKeyValue}
+                  onChange={(e) => setJiraKeyValue(e.target.value)}
+                  onBlur={handleSaveJiraLink}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveJiraLink();
+                    if (e.key === "Escape") setEditingJira(false);
+                  }}
+                  placeholder="PROJ-123"
+                  className="text-[12px] border border-[var(--accent-border)] rounded-md px-2 py-1 bg-[var(--accent-glow)] outline-none focus:ring-1 focus:ring-[var(--accent)] w-[100px] font-medium"
+                />
+              </div>
+            ) : jiraLink ? (
+              <div className="group/jira flex items-center gap-0.5">
                 <a
                   href={jiraLink.jiraIssueUrl || "#"}
                   target="_blank"
@@ -481,8 +573,39 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   {jiraLink.jiraStatus && <span className="opacity-60 truncate max-w-[80px] flex-shrink-0">· {jiraLink.jiraStatus}</span>}
                   <ExternalLink size={10} className="opacity-50 flex-shrink-0" />
                 </a>
-              )}
-              {slackLink && (
+                <div className="flex items-center gap-0.5 opacity-0 group-hover/jira:opacity-100 transition-opacity">
+                  <button onClick={() => { setJiraKeyValue(jiraLink.jiraIssueKey || ""); setEditingJira(true); }} className="p-0.5 text-slate-400 hover:text-[var(--accent)] cursor-pointer" title="수정"><Pencil size={10} /></button>
+                  <button onClick={() => handleDeleteLink(jiraLink.id)} className="p-0.5 text-slate-400 hover:text-red-500 cursor-pointer" title="삭제"><X size={10} /></button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setJiraKeyValue(""); setEditingJira(true); }}
+                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-[var(--accent)] hover:bg-[var(--accent-glow)] border border-dashed border-slate-200 hover:border-[var(--accent-border)] rounded-md px-2 py-1 transition-all cursor-pointer"
+              >
+                <Plus size={10} />Jira
+              </button>
+            )}
+
+            {/* Slack 링크 */}
+            {editingSlack ? (
+              <div className="flex items-center gap-1">
+                <MessageSquare size={11} className="text-slate-400 flex-shrink-0" />
+                <input
+                  ref={slackInputRef}
+                  value={slackUrlValue}
+                  onChange={(e) => setSlackUrlValue(e.target.value)}
+                  onBlur={handleSaveSlackLink}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveSlackLink();
+                    if (e.key === "Escape") setEditingSlack(false);
+                  }}
+                  placeholder="Slack 스레드 URL"
+                  className="text-[12px] border border-slate-200 rounded-md px-2 py-1 bg-slate-50 outline-none focus:ring-1 focus:ring-slate-300 w-[180px]"
+                />
+              </div>
+            ) : slackLink ? (
+              <div className="group/slack flex items-center gap-0.5">
                 <a
                   href={slackLink.slackThreadUrl || "#"}
                   target="_blank"
@@ -496,9 +619,20 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                   Slack
                   <ExternalLink size={10} className="opacity-50" />
                 </a>
-              )}
-            </div>
-          )}
+                <div className="flex items-center gap-0.5 opacity-0 group-hover/slack:opacity-100 transition-opacity">
+                  <button onClick={() => { setSlackUrlValue(slackLink.slackThreadUrl || ""); setEditingSlack(true); }} className="p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer" title="수정"><Pencil size={10} /></button>
+                  <button onClick={() => handleDeleteLink(slackLink.id)} className="p-0.5 text-slate-400 hover:text-red-500 cursor-pointer" title="삭제"><X size={10} /></button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setSlackUrlValue(""); setEditingSlack(true); }}
+                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 border border-dashed border-slate-200 hover:border-slate-300 rounded-md px-2 py-1 transition-all cursor-pointer"
+              >
+                <Plus size={10} />Slack
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>
