@@ -39,7 +39,7 @@ export const taskLinks = sqliteTable("task_links", {
     .notNull()
     .references(() => tasks.id, { onDelete: "cascade" }),
   linkType: text("link_type", {
-    enum: ["jira", "slack_thread", "gcal"],
+    enum: ["jira", "slack_thread", "gcal", "url"],
   }).notNull(),
   // Jira 매핑
   jiraIssueKey: text("jira_issue_key"),

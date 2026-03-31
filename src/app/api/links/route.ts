@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { taskId, linkType, jiraIssueKey, slackThreadUrl, slackChannelId, slackThreadTs } = body;
+    const { taskId, linkType, jiraIssueKey, slackThreadUrl, slackChannelId, slackThreadTs, url } = body;
 
     if (!taskId || !linkType) {
       return NextResponse.json({ error: "taskId와 linkType은 필수" }, { status: 400 });
@@ -41,6 +41,14 @@ export async function POST(request: NextRequest) {
         slackChannelId: slackChannelId || null,
         slackThreadTs: slackThreadTs || null,
         slackThreadUrl: slackThreadUrl || null,
+        createdAt: now,
+      });
+    } else if (linkType === "url" && url) {
+      await db.insert(schema.taskLinks).values({
+        id: linkId,
+        taskId,
+        linkType: "url",
+        slackThreadUrl: url.trim(),
         createdAt: now,
       });
     }

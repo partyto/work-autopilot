@@ -147,10 +147,13 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
   const [jiraKeyValue, setJiraKeyValue] = useState("");
   const [editingSlack, setEditingSlack] = useState(false);
   const [slackUrlValue, setSlackUrlValue] = useState("");
+  const [editingUrl, setEditingUrl] = useState(false);
+  const [urlValue, setUrlValue] = useState("");
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const jiraInputRef = useRef<HTMLInputElement>(null);
   const slackInputRef = useRef<HTMLInputElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const priorityMenuRef = useRef<HTMLDivElement>(null);
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const descRef = useRef<HTMLParagraphElement>(null);
@@ -166,6 +169,10 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
   useEffect(() => {
     if (editingSlack) slackInputRef.current?.focus();
   }, [editingSlack]);
+
+  useEffect(() => {
+    if (editingUrl) urlInputRef.current?.focus();
+  }, [editingUrl]);
 
   // 설명 2줄 초과 여부 감지
   useEffect(() => {
@@ -314,6 +321,25 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
     return { channelId, threadTs };
   };
 
+  const handleSaveUrlLink = async () => {
+    setEditingUrl(false);
+    const url = urlValue.trim();
+    if (!url) return;
+    try {
+      const existing = task.links?.find((l) => l.linkType === "url");
+      if (existing) await fetch(`/api/links?id=${existing.id}`, { method: "DELETE" });
+      await fetch("/api/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId: task.id, linkType: "url", url }),
+      });
+      toast.success("URL 연결됨");
+      onUpdate();
+    } catch {
+      toast.error("URL 저장 실패");
+    }
+  };
+
   const handleSaveSlackLink = async () => {
     setEditingSlack(false);
     const url = slackUrlValue.trim();
@@ -347,6 +373,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
 
   const jiraLink = task.links?.find((l) => l.linkType === "jira");
   const slackLink = task.links?.find((l) => l.linkType === "slack_thread");
+  const urlLink = task.links?.find((l) => l.linkType === "url");
   const isDone = task.status === "done";
   const pCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.low;
 
@@ -380,7 +407,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
 
       <div className={cn("pl-[18px]", compact ? "px-3.5 py-2.5" : "px-4 py-3.5")}>
 
-        {/* 상단: 소스·우선순위 배지 + 삭제 버튼 */}
+        {/* 상단: 소스·우선순위 배지(좌) + 상태 드롭다운·삭제(우) */}
         <div className="flex items-center justify-between gap-2 mb-1">
           <div className="flex items-center gap-1">
             {SOURCE_BADGE[task.sourceType] && (
@@ -411,13 +438,41 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             </div>
           </div>
 
-          {/* 삭제 버튼 (hover) */}
-          <button
-            onClick={handleDelete}
-            className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer opacity-0 group-hover:opacity-100 flex-shrink-0"
-          >
-            <Trash2 size={12} />
-          </button>
+          {/* 우측: 상태 드롭다운 + 삭제 버튼 */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="relative" ref={statusMenuRef}>
+              <button
+                onClick={() => setShowStatusMenu(!showStatusMenu)}
+                disabled={isUpdating}
+                className={statusBtnClass}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-white/70 flex-shrink-0" />
+                {STATUS_LABELS[task.status]}
+                <ChevronDown size={9} className={cn("transition-transform", showStatusMenu ? "rotate-180" : "")} />
+              </button>
+              {showStatusMenu && (
+                <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-lg border border-slate-200 py-1 min-w-[110px]">
+                  {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleStatusChange(s)}
+                      className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-slate-50 transition-colors cursor-pointer",
+                        task.status === s ? "font-semibold text-slate-800" : "text-slate-600")}
+                    >
+                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[s])} />
+                      {STATUS_LABELS[s]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleDelete}
+              className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
         </div>
 
         {/* 제목 */}
@@ -523,43 +578,11 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
           )}
         </div>
 
-        {/* 하단: 상태 드롭다운 + 링크 */}
-        <div className={cn("flex items-center gap-1.5 flex-wrap", compact ? "mt-2.5" : "mt-3")}>
-
-          {/* 상태 드롭다운 */}
-          <div className="relative flex-shrink-0" ref={statusMenuRef}>
-            <button
-              onClick={() => setShowStatusMenu(!showStatusMenu)}
-              disabled={isUpdating}
-              className={statusBtnClass}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-white/70 flex-shrink-0" />
-              {STATUS_LABELS[task.status]}
-              <ChevronDown size={9} className={cn("transition-transform", showStatusMenu ? "rotate-180" : "")} />
-            </button>
-            {showStatusMenu && (
-              <div className="absolute bottom-full left-0 mb-1 z-50 bg-white rounded-xl shadow-lg border border-slate-200 py-1 min-w-[110px]">
-                {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => handleStatusChange(s)}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-slate-50 transition-colors cursor-pointer",
-                      task.status === s ? "font-semibold text-slate-800" : "text-slate-600"
-                    )}
-                  >
-                    <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[s])} />
-                    {STATUS_LABELS[s]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 링크 영역 */}
+        {/* 하단: 링크 영역 */}
+        <div className={cn("flex items-center gap-1.5 flex-wrap", compact ? "mt-2" : "mt-2.5")}>
           <div className={cn(
-            "flex items-center gap-1.5 flex-wrap flex-1 transition-opacity",
-            !jiraLink && !slackLink && !editingJira && !editingSlack ? "opacity-0 group-hover:opacity-100" : ""
+            "flex items-center gap-1.5 flex-wrap w-full transition-opacity",
+            !jiraLink && !slackLink && !urlLink && !editingJira && !editingSlack && !editingUrl ? "opacity-0 group-hover:opacity-100" : ""
           )}>
             {/* Jira */}
             {editingJira ? (
@@ -633,6 +656,41 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
               <button onClick={() => { setSlackUrlValue(""); setEditingSlack(true); }}
                 className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 border border-dashed border-slate-200 hover:border-slate-300 rounded-md px-1.5 py-0.5 transition-all cursor-pointer">
                 <Plus size={9} />Slack
+              </button>
+            )}
+
+            {/* 기타 URL */}
+            {editingUrl ? (
+              <div className="flex items-center gap-1">
+                <ExternalLink size={10} className="text-slate-400 flex-shrink-0" />
+                <input
+                  ref={urlInputRef}
+                  value={urlValue}
+                  onChange={(e) => setUrlValue(e.target.value)}
+                  onBlur={handleSaveUrlLink}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveUrlLink();
+                    if (e.key === "Escape") setEditingUrl(false);
+                  }}
+                  placeholder="https://..."
+                  className="text-[12px] border border-slate-200 rounded-md px-2 py-1 bg-slate-50 outline-none focus:ring-1 focus:ring-slate-300 w-[180px]"
+                />
+              </div>
+            ) : urlLink ? (
+              <div className="group/url flex items-center gap-0.5">
+                <a href={urlLink.slackThreadUrl || "#"} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 rounded-lg shadow-sm transition-colors flex-shrink-0 px-2 py-1 text-[11px]">
+                  <ExternalLink size={10} />URL
+                </a>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover/url:opacity-100 transition-opacity">
+                  <button onClick={() => { setUrlValue(urlLink.slackThreadUrl || ""); setEditingUrl(true); }} className="p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer" title="수정"><Pencil size={9} /></button>
+                  <button onClick={() => handleDeleteLink(urlLink.id, "URL")} className="p-0.5 text-slate-400 hover:text-red-500 cursor-pointer" title="삭제"><X size={9} /></button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setUrlValue(""); setEditingUrl(true); }}
+                className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 border border-dashed border-slate-200 hover:border-slate-300 rounded-md px-1.5 py-0.5 transition-all cursor-pointer">
+                <Plus size={9} />URL
               </button>
             )}
           </div>
