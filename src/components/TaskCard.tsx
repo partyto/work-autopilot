@@ -372,14 +372,13 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
         <div className={cn("w-full h-full cursor-pointer", pCfg.barColor)} onClick={() => setShowPriorityMenu(true)} title="우선순위 변경" />
       </div>
 
-      <div className={cn("pl-[18px]", compact ? "px-3.5 py-3" : "px-5 py-4")}>
+      <div className={cn("pl-[18px]", compact ? "px-3.5 py-2.5" : "px-4 py-3.5")}>
         {/* 상단: 배지 + 삭제 */}
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <div className="flex items-center gap-1.5">
-            <div className={cn("rounded-full flex-shrink-0", compact ? "w-2 h-2" : "w-2.5 h-2.5", STATUS_DOT[task.status] || "bg-slate-400")} />
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-1">
             {SOURCE_BADGE[task.sourceType] && (
               <span className={cn(
-                "flex-shrink-0 font-bold rounded-md leading-none tracking-wide text-[10px] px-1.5 py-0.5",
+                "flex-shrink-0 font-bold rounded leading-none tracking-wide text-[9px] px-1.5 py-0.5",
                 SOURCE_BADGE[task.sourceType].className
               )}>
                 {SOURCE_BADGE[task.sourceType].label}
@@ -390,12 +389,12 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
               <button
                 onClick={() => setShowPriorityMenu(!showPriorityMenu)}
                 className={cn(
-                  "flex items-center gap-1 font-bold rounded-md border leading-none transition-all hover:opacity-80 cursor-pointer text-[11px] px-2 py-1",
+                  "flex items-center gap-0.5 font-semibold rounded border leading-none transition-all hover:opacity-80 cursor-pointer text-[10px] px-1.5 py-0.5",
                   pCfg.badgeClass
                 )}
                 title="우선순위 변경"
               >
-                <Flag size={10} />
+                <Flag size={9} />
                 {pCfg.label}
               </button>
               {showPriorityMenu && (
@@ -468,7 +467,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
         )}
 
         {/* 메타 정보 */}
-        <div className={cn("flex items-center flex-wrap gap-2.5", compact ? "mt-1.5" : "mt-2")}>
+        <div className={cn("flex items-center flex-wrap gap-1.5", compact ? "mt-1" : "mt-1.5")}>
           {editingDue ? (
             <div className="flex items-center gap-1">
               <input
@@ -492,22 +491,22 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             <button
               onClick={() => setEditingDue(true)}
               className={cn(
-                "flex items-center gap-1 text-[13px] rounded-md px-1.5 py-0.5 transition-all hover:bg-slate-100 cursor-pointer",
-                isDue ? "text-[var(--error)] font-medium" : isDueToday ? "text-[var(--accent)] font-medium" : isDueSoon ? "text-slate-500" : "text-slate-400 hover:text-slate-600"
+                "flex items-center gap-0.5 text-[11px] rounded px-1 py-0.5 transition-all hover:bg-slate-100 cursor-pointer",
+                isDue ? "text-[var(--error)] font-medium" : isDueToday ? "text-[var(--accent)] font-medium" : isDueSoon ? "text-slate-500" : task.dueDate ? "text-slate-400 hover:text-slate-600" : "text-slate-300 hover:text-slate-500"
               )}
               title="기한 설정"
             >
-              {isDue || isDueToday ? <AlertCircle size={11} /> : <Calendar size={11} />}
-              {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate.slice(0,10)}` : isDueToday ? `오늘 마감` : `마감 ${task.dueDate.slice(5,10)}`) : "기한 없음"}
+              {isDue || isDueToday ? <AlertCircle size={10} /> : <Calendar size={10} />}
+              {task.dueDate ? (isDue ? `기한 초과 ${task.dueDate.slice(0,10)}` : isDueToday ? `오늘 마감` : `마감 ${task.dueDate.slice(5,10)}`) : null}
             </button>
           )}
 
           {(() => {
             const { label, value } = getOriginDate(task.sourceType, task.createdAt, jiraLink, slackLink);
-            return <span className="text-[12px] text-slate-400">{compact ? value.slice(5, 16) : `${label} ${value}`}</span>;
+            return <span className="text-[11px] text-slate-400">{compact ? value.slice(5, 16) : `${label} ${value}`}</span>;
           })()}
           {task.completedAt && (
-            <span className="text-[12px] text-slate-400">완료 {formatDateTime(task.completedAt)}</span>
+            <span className="text-[11px] text-slate-400">완료 {formatDateTime(task.completedAt)}</span>
           )}
         </div>
 
@@ -543,7 +542,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
         )}
 
         {/* 상태 버튼 + 링크 */}
-        <div className={cn("flex flex-col gap-1.5", compact ? "mt-3" : "mt-4")}>
+        <div className={cn("flex flex-col gap-1", compact ? "mt-2.5" : "mt-3")}>
           {/* 상태 버튼 */}
           <div className="flex gap-0.5 bg-slate-50 rounded-lg p-0.5 border border-slate-100 w-full">
             {STATUSES.filter((s) => !(s === "in_qa" && task.sourceType === "slack_detected")).map((s) => (
@@ -553,7 +552,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
                 disabled={isUpdating}
                 className={cn(
                   "flex-1 rounded-md font-medium transition-all cursor-pointer text-center",
-                  compact ? "px-1.5 py-1.5 text-[12px]" : "px-2.5 py-2 text-[13px]",
+                  compact ? "px-1 py-1 text-[10px]" : "px-1.5 py-1.5 text-[11px]",
                   task.status === s
                     ? cn(STATUS_COLORS[s], "text-white shadow-sm")
                     : "text-slate-500 hover:text-slate-700 hover:bg-white"
@@ -565,7 +564,10 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
           </div>
 
           {/* Jira / Slack 링크 — 추가/수정/삭제 가능 */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className={cn(
+            "flex items-center gap-1.5 flex-wrap transition-opacity",
+            !jiraLink && !slackLink && !editingJira && !editingSlack ? "opacity-0 group-hover:opacity-100" : ""
+          )}>
             {/* Jira 링크 */}
             {editingJira ? (
               <div className="flex items-center gap-1">
