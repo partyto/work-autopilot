@@ -987,14 +987,14 @@ function KanbanColumn({
   emptyLabel: string;
 }) {
   return (
-    <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-100">
-      <div className="flex items-center gap-2 mb-3 px-1">
+    <div>
+      <div className="flex items-center gap-2 mb-2">
         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
         <span className="text-[12px] font-semibold text-slate-600 flex-1">{title}</span>
         <span className={`text-[11px] font-semibold tabular-nums ${headerColor}`}>{tasks.length}</span>
       </div>
       {tasks.length === 0 ? (
-        <div className="flex items-center justify-center py-8 text-[11px] text-slate-300">{emptyLabel}</div>
+        <div className="flex items-center justify-center py-8 text-[11px] text-slate-300 border border-dashed border-slate-200 rounded-2xl">{emptyLabel}</div>
       ) : (
         <motion.div
           className="space-y-2"
