@@ -133,6 +133,36 @@ export function isJiraConfigured(): boolean {
   return !!(JIRA_EMAIL && JIRA_TOKEN);
 }
 
+// JIRA 이슈에 파일 첨부
+export async function attachFileToIssue(
+  issueKey: string,
+  filename: string,
+  buffer: Buffer,
+): Promise<void> {
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const formData = new FormData();
+  formData.append("file", blob, filename);
+
+  const res = await fetch(
+    `${JIRA_SITE}/rest/api/3/issue/${issueKey}/attachments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: authHeader(),
+        "X-Atlassian-Token": "no-check",
+      },
+      body: formData,
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`JIRA attachment failed (${res.status}): ${text}`);
+  }
+}
+
 // Types
 export interface JiraIssue {
   key: string;
