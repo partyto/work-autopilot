@@ -144,7 +144,7 @@ export async function updateMessage(
   blocks: any[],
   text: string,
 ) {
-  return slackApi("chat.update", { channel, ts, blocks, text, mrkdwn: true });
+  return slackApi("chat.update", { channel, ts, blocks, text });
 }
 
 // Slack 설정 유효성 체크
