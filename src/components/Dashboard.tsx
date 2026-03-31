@@ -26,7 +26,6 @@ import { cn } from "@/lib/utils";
 import TaskForm from "./TaskForm";
 import TaskCard from "./TaskCard";
 import ActionCard from "./ActionCard";
-import WorkflowSODModal from "./WorkflowSODModal";
 import WorkflowEODModal from "./WorkflowEODModal";
 
 type TaskWithLinks = {
@@ -146,7 +145,6 @@ export default function Dashboard() {
   const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set());
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
   const [workflowRunning, setWorkflowRunning] = useState<"eod" | "sod" | null>(null);
-  const [sodModalOpen, setSodModalOpen] = useState(false);
   const [eodModalOpen, setEodModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -198,12 +196,10 @@ export default function Dashboard() {
   }, []);
 
   const handleWorkflow = (type: "eod" | "sod") => {
-    if (type === "sod") setSodModalOpen(true);
-    else setEodModalOpen(true);
+    if (type === "eod") setEodModalOpen(true);
   };
 
   const handleWorkflowSent = useCallback(() => {
-    setSodModalOpen(false);
     setEodModalOpen(false);
     fetchWorkflowStatus();
     handleRefreshAll();
@@ -352,20 +348,6 @@ export default function Dashboard() {
           <ConnStatus label="Scheduler" connected={scanStatus?.scheduler} />
         </div>
         <div className="flex items-center gap-2">
-          {/* 하루 시작 */}
-          <button
-            onClick={() => handleWorkflow("sod")}
-            disabled={!!workflowRunning}
-            className={cn(
-              "flex items-center gap-1 px-3 py-1.5 text-[13px] font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50",
-              workflowStatus?.nextAction === "sod"
-                ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-dim)]"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-            )}
-          >
-            <Sunrise size={12} />
-            {workflowRunning === "sod" ? "처리중..." : "시작"}
-          </button>
           {/* 하루 마무리 */}
           <button
             onClick={() => handleWorkflow("eod")}
@@ -394,11 +376,6 @@ export default function Dashboard() {
       </div>
 
       {/* ── 모달 ── */}
-      <AnimatePresence>
-        {sodModalOpen && (
-          <WorkflowSODModal onClose={() => setSodModalOpen(false)} onSent={handleWorkflowSent} />
-        )}
-      </AnimatePresence>
       <AnimatePresence>
         {eodModalOpen && (
           <WorkflowEODModal onClose={() => setEodModalOpen(false)} onSent={handleWorkflowSent} />

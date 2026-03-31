@@ -39,8 +39,20 @@ export function initScheduler() {
     timezone: "Asia/Seoul",
   });
 
-  // EOD(하루 마무리)는 대시보드 '마무리' 버튼으로만 수동 실행
-  // → 자동 스케줄 제거
+  // 매일 19:00 KST — 일일 업무 리포트 Slack 발송 (공휴일 제외)
+  cron.schedule("0 19 * * 1-5", async () => {
+    if (!isWorkingDay(new Date())) return;
+    console.log(`[Scheduler] Daily report started at ${new Date().toISOString()}`);
+    try {
+      await runDailyScan(true); // 일일 업무 리포트 DM 발송
+      await executeApprovedActions();
+      console.log(`[Scheduler] Daily report completed`);
+    } catch (error) {
+      console.error("[Scheduler] Daily report failed:", error);
+    }
+  }, {
+    timezone: "Asia/Seoul",
+  });
 
   // 15분 간격 — #help-정보보안 모니터링 (평일 업무시간 09:00~19:00)
   cron.schedule("*/15 9-19 * * 1-5", async () => {
