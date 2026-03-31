@@ -56,9 +56,14 @@ export async function runExtractionMonitor(overrideChannel?: string) {
     if (newProcessed.includes(threadTs)) continue;
 
     try {
-      // 스레드 전체 읽기
-      const thread = await getThreadReplies(targetChannel, threadTs);
-      const fullText = thread.map((m: any) => m.text || "").join("\n");
+      // 스레드 전체 읽기 (실패 시 메시지 원문으로 폴백)
+      let fullText = msg.text || "";
+      try {
+        const thread = await getThreadReplies(targetChannel, threadTs);
+        if (thread.length > 0) fullText = thread.map((m: any) => m.text || "").join("\n");
+      } catch {
+        // 스레드가 없는 단독 메시지면 msg.text 사용
+      }
 
       // JIRA 티켓 파싱
       const ticketKey = parseJiraTicket(fullText) || "SCR-?";
