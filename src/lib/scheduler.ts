@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { runDailyScan, executeApprovedActions } from "./engine";
-import { runEndOfDay, runStartOfDay } from "./workflow";
+import { runEndOfDay, runStartOfDay, hasTodaySOD, sendSODNudge } from "./workflow";
 import { isWorkingDay } from "./holidays";
 import { runExtractionMonitor } from "./extraction-monitor";
 
@@ -25,15 +25,22 @@ export function initScheduler() {
     timezone: "Asia/Seoul",
   });
 
-  // 매일 10:00 KST — 하루 시작 리포트 (공휴일 제외)
+  // 매일 10:00 KST — SOD 완료 여부 체크 후 분기
+  // - 이미 대시보드에서 하루 시작을 했다면 → 스킵
+  // - 아직 안 했다면 → "하루를 시작해 볼까요?" 넛지 메시지 발송
   cron.schedule("0 10 * * 1-5", async () => {
     if (!isWorkingDay(new Date())) return; // 공휴일 스킵
-    console.log(`[Scheduler] SOD started at ${new Date().toISOString()}`);
+    console.log(`[Scheduler] SOD check at ${new Date().toISOString()}`);
     try {
-      await runStartOfDay();
-      console.log(`[Scheduler] SOD completed`);
+      const alreadyStarted = await hasTodaySOD();
+      if (alreadyStarted) {
+        console.log(`[Scheduler] SOD already done today — skipping nudge`);
+        return;
+      }
+      await sendSODNudge();
+      console.log(`[Scheduler] SOD nudge sent`);
     } catch (error) {
-      console.error("[Scheduler] SOD failed:", error);
+      console.error("[Scheduler] SOD check/nudge failed:", error);
     }
   }, {
     timezone: "Asia/Seoul",

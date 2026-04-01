@@ -286,3 +286,39 @@ export async function runStartOfDay(): Promise<{ message: string }> {
   console.log(`[Workflow] SOD completed for ${todayStr}`);
   return { message };
 }
+
+// ===== SOD 완료 여부 확인 =====
+export async function hasTodaySOD(): Promise<boolean> {
+  const todayStr = toKSTDateStr(new Date());
+  const log = await db.query.workflowLogs.findFirst({
+    where: (w) => and(eq(w.date, todayStr), eq(w.type, "sod")),
+  });
+  return !!log;
+}
+
+// ===== 10:00 넛지 — 아직 하루 시작 안 했을 때 =====
+export async function sendSODNudge(): Promise<void> {
+  const today = new Date();
+  const dateLabel = formatWorkingDate(today);
+  const dashboardUrl = process.env.APP_URL ?? "http://localhost:3100";
+
+  const message = [
+    `*🌅 하루를 시작해 볼까요?*`,
+    ``,
+    `오늘 *${dateLabel}* 아직 하루 시작을 하지 않으셨네요.`,
+    `준비되셨으면 대시보드에서 시작해 주세요 👇`,
+    ``,
+    `<${dashboardUrl}|📋 대시보드 열기>`,
+    ``,
+    `_🤖 Work Pavlotrasche — 자동 알림_`,
+  ].join("\n");
+
+  if (slack.isSlackConfigured()) {
+    try {
+      await slack.sendDM(message);
+      console.log(`[Workflow] SOD nudge sent for ${toKSTDateStr(today)}`);
+    } catch (err) {
+      console.error("[Workflow] SOD nudge Slack DM failed:", err);
+    }
+  }
+}
