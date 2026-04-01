@@ -4,6 +4,21 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   ScanLine,
   CheckCircle2,
   Clock,
@@ -21,6 +36,7 @@ import {
   Sunrise,
   Sunset,
   Ban,
+  GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TaskForm from "./TaskForm";
@@ -38,6 +54,7 @@ type TaskWithLinks = {
   dueDate?: string | null;
   createdAt: string;
   completedAt?: string | null;
+  sortOrder?: number | null;
   links?: any[];
 };
 
@@ -107,17 +124,14 @@ const KPI_FILTERS: Record<string, (t: TaskWithLinks) => boolean> = {
   noLink: (t) => !t.links || t.links.length === 0,
 };
 
-const PRIORITY_LEVEL: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
 const sortTasks = (list: TaskWithLinks[]) =>
   [...list].sort((a, b) => {
-    const pa = PRIORITY_LEVEL[a.priority] ?? 2;
-    const pb = PRIORITY_LEVEL[b.priority] ?? 2;
-    if (pa !== pb) return pa - pb;
-    const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-    const dbTime = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-    if (da !== dbTime) return da - dbTime;
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    // sortOrder 우선 (0이 최상단, null/undefined는 맨 뒤)
+    const sa = a.sortOrder ?? 999999;
+    const sb = b.sortOrder ?? 999999;
+    if (sa !== sb) return sa - sb;
+    // 같은 sortOrder면 최신 생성 순
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
 const containerVariants = {
@@ -224,6 +238,28 @@ export default function Dashboard() {
   const handleRefreshAll = useCallback(() => {
     Promise.all([fetchTasks(), fetchActions(), fetchReports()]);
   }, [fetchTasks, fetchActions, fetchReports]);
+
+  // 드래그 앤 드롭으로 카드 순서 변경 후 서버에 저장
+  const handleReorder = useCallback(async (reorderedTasks: TaskWithLinks[]) => {
+    // 낙관적 업데이트: tasks 배열 내 sortOrder 즉시 갱신
+    setTasks((prev) => {
+      const reorderedIds = new Map(reorderedTasks.map((t, i) => [t.id, i]));
+      return prev.map((t) =>
+        reorderedIds.has(t.id) ? { ...t, sortOrder: reorderedIds.get(t.id)! } : t
+      );
+    });
+    // 서버에 순서 저장
+    try {
+      await fetch("/api/tasks/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: reorderedTasks.map((t) => t.id) }),
+      });
+    } catch {
+      toast.error("순서 저장 실패");
+      fetchTasks(); // 롤백
+    }
+  }, [fetchTasks]);
 
   const handleScanNow = async () => {
     setIsScanning(true);
@@ -509,9 +545,9 @@ export default function Dashboard() {
             <LoadingSpinner />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
-              <KanbanColumn title="대기" tasks={kanbanPending} onUpdate={handleRefreshAll} dotColor="bg-slate-300" headerColor="text-slate-500" emptyLabel="대기 중인 할일 없음" />
-              <KanbanColumn title="진행 중 · IN-QA" tasks={kanbanActive} onUpdate={handleRefreshAll} dotColor="bg-[var(--accent)]" headerColor="text-[var(--accent)]" emptyLabel="진행 중인 할일 없음" />
-              <KanbanColumn title="완료" tasks={kanbanDone} onUpdate={handleRefreshAll} dotColor="bg-slate-400" headerColor="text-slate-500" emptyLabel="완료된 할일 없음" />
+              <KanbanColumn title="대기" tasks={kanbanPending} onUpdate={handleRefreshAll} onReorder={handleReorder} dotColor="bg-slate-300" headerColor="text-slate-500" emptyLabel="대기 중인 할일 없음" />
+              <KanbanColumn title="진행 중 · IN-QA" tasks={kanbanActive} onUpdate={handleRefreshAll} onReorder={handleReorder} dotColor="bg-[var(--accent)]" headerColor="text-[var(--accent)]" emptyLabel="진행 중인 할일 없음" />
+              <KanbanColumn title="완료" tasks={kanbanDone} onUpdate={handleRefreshAll} onReorder={handleReorder} dotColor="bg-slate-400" headerColor="text-slate-500" emptyLabel="완료된 할일 없음" />
             </div>
           )}
         </>
@@ -952,17 +988,70 @@ function EmptyState({ icon, message, sub }: { icon: React.ReactNode; message: st
   );
 }
 
+// ===== 드래그 가능한 카드 래퍼 =====
+function SortableTaskCard({ task, onUpdate }: { task: TaskWithLinks; onUpdate: () => void }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative group/drag">
+      {/* 드래그 핸들 */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="absolute -left-1 top-1/2 -translate-y-1/2 -translate-x-full opacity-0 group-hover/drag:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 p-0.5 z-10"
+        aria-label="드래그하여 순서 변경"
+      >
+        <GripVertical size={14} />
+      </button>
+      <TaskCard task={task} onUpdate={onUpdate} compact />
+    </div>
+  );
+}
+
 // ===== 칸반 컬럼 =====
 function KanbanColumn({
-  title, tasks, onUpdate, dotColor, headerColor, emptyLabel,
+  title, tasks, onUpdate, onReorder, dotColor, headerColor, emptyLabel,
 }: {
   title: string;
   tasks: TaskWithLinks[];
   onUpdate: () => void;
+  onReorder: (reordered: TaskWithLinks[]) => void;
   dotColor: string;
   headerColor: string;
   emptyLabel: string;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const taskIds = useMemo(() => tasks.map((t) => t.id), [tasks]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = tasks.findIndex((t) => t.id === active.id);
+    const newIndex = tasks.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(tasks, oldIndex, newIndex);
+    onReorder(reordered);
+  }, [tasks, onReorder]);
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
@@ -973,18 +1062,15 @@ function KanbanColumn({
       {tasks.length === 0 ? (
         <div className="flex items-center justify-center py-8 text-[11px] text-slate-300 border border-dashed border-slate-200 rounded-2xl">{emptyLabel}</div>
       ) : (
-        <motion.div
-          className="space-y-2"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          {tasks.map((task) => (
-            <motion.div key={task.id} variants={itemVariants}>
-              <TaskCard task={task} onUpdate={onUpdate} compact />
-            </motion.div>
-          ))}
-        </motion.div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2 pl-4">
+              {tasks.map((task) => (
+                <SortableTaskCard key={task.id} task={task} onUpdate={onUpdate} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );

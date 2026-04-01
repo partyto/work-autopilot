@@ -139,7 +139,7 @@ export async function attachFileToIssue(
   filename: string,
   buffer: Buffer,
 ): Promise<void> {
-  const blob = new Blob([buffer], {
+  const blob = new Blob([new Uint8Array(buffer)], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const formData = new FormData();

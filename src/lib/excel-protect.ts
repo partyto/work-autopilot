@@ -8,7 +8,7 @@ export async function protectExcel(
   password: string = DEFAULT_PASSWORD,
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
 
   // 모든 시트에 비밀번호 보호 적용
   workbook.eachSheet((sheet) => {
