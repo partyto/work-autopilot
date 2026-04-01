@@ -4,10 +4,8 @@ import {
   updateMessage,
   postBlockMessage,
   sendDM,
-  sendBlockDM,
   replyToThread,
 } from "@/lib/integrations/slack";
-import { findLatestExcelInDM, downloadSlackFile } from "@/lib/integrations/slack-files";
 import { protectExcel } from "@/lib/excel-protect";
 import { attachFileToIssue } from "@/lib/integrations/jira";
 import {
@@ -17,6 +15,7 @@ import {
   getWeekRange,
   generateSQL,
 } from "@/lib/duty-rotation";
+import { extractFromQueryPie, isSessionConfigured } from "@/lib/querypie";
 
 export const dynamic = "force-dynamic";
 
@@ -169,234 +168,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // ─── 추출 유형: 마케팅 ───
-    if (actionId === "extract_marketing") {
-      const sql = generateSQL("marketing", value.shop_seq);
-
-      await updateMessage(channelId, messageTs, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:clipboard: *${value.ticket_key} 추출 요청*\n\n:white_check_mark: *마케팅 수신용* 선택됨\nshop_seq: \`${value.shop_seq}\``,
-          },
-        },
-      ], `${value.ticket_key} — 마케팅 수신용 선택`);
-
-      // SQL 쿼리 + 업로드 완료 버튼 DM
-      const uploadMeta = JSON.stringify({
-        ticket_key: value.ticket_key,
-        shop_seq: value.shop_seq,
-        thread_ts: value.thread_ts || "",
-        channel: value.channel || "",
-        permalink: value.permalink || "",
-        extract_type: "marketing",
-      });
-
-      await sendBlockDM(user.id, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:mag: *QueryPie에서 아래 쿼리를 실행해주세요:*`,
-          },
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `\`\`\`\n${sql}\n\`\`\``,
-          },
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `실행 후 결과를 엑셀(XLSX)로 다운로드 받고,\n*이 대화에 파일을 업로드*한 뒤 아래 버튼을 눌러주세요!`,
-          },
-        },
-        {
-          type: "actions",
-          block_id: "upload_actions",
-          elements: [
-            {
-              type: "button",
-              text: { type: "plain_text", text: "📎 엑셀 업로드 완료", emoji: true },
-              style: "primary",
-              action_id: "excel_upload_done",
-              value: uploadMeta,
-            },
-          ],
-        },
-      ], `${value.ticket_key} SQL 쿼리 — 실행 후 엑셀 업로드`);
-
-      return NextResponse.json({ ok: true });
-    }
-
-    // ─── 추출 유형: 공지성 ───
-    if (actionId === "extract_notice") {
-      const sql = generateSQL("notice", value.shop_seq);
-
-      await updateMessage(channelId, messageTs, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:clipboard: *${value.ticket_key} 추출 요청*\n\n:white_check_mark: *공지성 수신용* 선택됨\nshop_seq: \`${value.shop_seq}\``,
-          },
-        },
-      ], `${value.ticket_key} — 공지성 수신용 선택`);
-
-      // SQL 쿼리 + 업로드 완료 버튼 DM
-      const uploadMeta = JSON.stringify({
-        ticket_key: value.ticket_key,
-        shop_seq: value.shop_seq,
-        thread_ts: value.thread_ts || "",
-        channel: value.channel || "",
-        permalink: value.permalink || "",
-        extract_type: "notice",
-      });
-
-      await sendBlockDM(user.id, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:mag: *QueryPie에서 아래 쿼리를 실행해주세요:*`,
-          },
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `\`\`\`\n${sql}\n\`\`\``,
-          },
-        },
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `실행 후 결과를 엑셀(XLSX)로 다운로드 받고,\n*이 대화에 파일을 업로드*한 뒤 아래 버튼을 눌러주세요!`,
-          },
-        },
-        {
-          type: "actions",
-          block_id: "upload_actions",
-          elements: [
-            {
-              type: "button",
-              text: { type: "plain_text", text: "📎 엑셀 업로드 완료", emoji: true },
-              style: "primary",
-              action_id: "excel_upload_done",
-              value: uploadMeta,
-            },
-          ],
-        },
-      ], `${value.ticket_key} SQL 쿼리 — 실행 후 엑셀 업로드`);
-
-      return NextResponse.json({ ok: true });
-    }
-
-    // ─── 엑셀 업로드 완료 → 보호 + JIRA 첨부 ───
-    if (actionId === "excel_upload_done") {
-      const userId = user.id;
+    // ─── 추출 유형: 마케팅 / 공지성 → QueryPie 자동 파이프라인 ───
+    if (actionId === "extract_marketing" || actionId === "extract_notice") {
+      const extractType = actionId === "extract_marketing" ? "marketing" : "notice";
+      const extractLabel = actionId === "extract_marketing" ? "마케팅 수신용" : "공지성 수신용";
       const meta = value;
+      const pmUserId = user.id;
 
-      // Slack 3초 제한 → 즉시 응답, 비동기 처리
+      // 즉시 메시지 업데이트 (버튼 제거 + 진행 상태 표시)
+      await updateMessage(channelId, messageTs, [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `:clipboard: *${meta.ticket_key} 추출 요청*\n\n:hourglass_flowing_sand: *${extractLabel}* 선택됨 — QueryPie 추출 중...\nshop_seq: \`${meta.shop_seq || "확인 필요"}\``,
+          },
+        },
+      ], `${meta.ticket_key} — ${extractLabel} 추출 중`);
+
+      // Slack 3초 제한 → 즉시 응답, 비동기로 파이프라인 실행
       void (async () => {
+        if (!isSessionConfigured()) {
+          await sendDM(
+            `:warning: QueryPie 세션이 설정되지 않았습니다.\n\`POST /api/querypie/set-cookies\`로 쿠키를 등록해주세요.`,
+            pmUserId,
+          );
+          return;
+        }
+
+        await sendDM(`⏳ *${meta.ticket_key}* QueryPie에서 추출 중...`, pmUserId);
+
         try {
-          await updateMessage(channelId, messageTs, [
-            {
-              type: "section",
-              text: {
-                type: "mrkdwn",
-                text: `:hourglass_flowing_sand: *${meta.ticket_key}* 처리 중...\n엑셀 보호 → JIRA 첨부 진행 중`,
-              },
-            },
-          ], `${meta.ticket_key} 처리 중...`);
+          const sql = generateSQL(extractType, meta.shop_seq);
+          const xlsxBuffer = await extractFromQueryPie(sql);
+          const protectedBuffer = await protectExcel(xlsxBuffer, "1234abcd");
+          const filename = `${meta.ticket_key}_${extractType}.xlsx`;
 
-          // 1. DM에서 최신 Excel 파일 찾기
-          const file = await findLatestExcelInDM(userId);
-          if (!file) {
-            await updateMessage(channelId, messageTs, [
-              {
-                type: "section",
-                text: {
-                  type: "mrkdwn",
-                  text: `:warning: *${meta.ticket_key}* — 엑셀 파일을 찾을 수 없습니다.\n이 대화에 .xlsx 파일을 먼저 업로드해주세요.`,
-                },
-              },
-              {
-                type: "actions",
-                block_id: "upload_retry",
-                elements: [
-                  {
-                    type: "button",
-                    text: { type: "plain_text", text: "📎 엑셀 업로드 완료", emoji: true },
-                    style: "primary",
-                    action_id: "excel_upload_done",
-                    value: JSON.stringify(meta),
-                  },
-                ],
-              },
-            ], `${meta.ticket_key} — 파일을 찾을 수 없음`);
-            return;
-          }
+          await attachFileToIssue(meta.ticket_key, filename, protectedBuffer);
 
-          // 2. 파일 다운로드
-          const rawBuffer = await downloadSlackFile(file.url);
-
-          // 3. 비밀번호 보호
-          const protectedBuffer = await protectExcel(rawBuffer);
-          const protectedFilename = file.name.replace(/\.xlsx$/i, "_protected.xlsx");
-
-          // 4. JIRA 첨부
-          await attachFileToIssue(meta.ticket_key, protectedFilename, protectedBuffer);
-
-          // 5. DM 완료 업데이트
-          await updateMessage(channelId, messageTs, [
-            {
-              type: "section",
-              text: {
-                type: "mrkdwn",
-                text: `:white_check_mark: *${meta.ticket_key}* 처리 완료!\n\n:lock: 비밀번호 보호 적용됨\n:ticket: <https://catchtable.atlassian.net/browse/${meta.ticket_key}|JIRA 티켓>에 첨부됨\n:page_facing_up: 파일: \`${protectedFilename}\``,
-              },
-            },
-          ], `${meta.ticket_key} 처리 완료`);
-
-          // 6. #help-정보보안 스레드에 완료 알림 (thread_ts가 있을 때만)
+          // #help-정보보안 스레드에 완료 답글
           if (meta.thread_ts && meta.channel) {
             await replyToThread(
               meta.channel,
               meta.thread_ts,
-              `:white_check_mark: *${meta.ticket_key}* 데이터 추출이 완료되었습니다.\n비밀번호 보호된 파일이 JIRA 티켓에 첨부되었습니다.`,
+              `:white_check_mark: *${meta.ticket_key}* 데이터 추출이 완료되었습니다.`,
             );
           }
+
+          // 원본 요청자에게 비밀번호 DM
+          if (meta.requester_id) {
+            await sendDM(
+              `:page_facing_up: *${meta.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`1234abcd\``,
+              meta.requester_id,
+            );
+          }
+
+          await sendDM(`✅ *${meta.ticket_key}* 처리 완료!`, pmUserId);
         } catch (err) {
-          console.error("[excel_upload_done] error:", err);
-          try {
-            await updateMessage(channelId, messageTs, [
-              {
-                type: "section",
-                text: {
-                  type: "mrkdwn",
-                  text: `:x: *${meta.ticket_key}* 처리 실패\n에러: ${String(err).slice(0, 200)}`,
-                },
-              },
-              {
-                type: "actions",
-                block_id: "upload_retry",
-                elements: [
-                  {
-                    type: "button",
-                    text: { type: "plain_text", text: "🔄 재시도", emoji: true },
-                    action_id: "excel_upload_done",
-                    value: JSON.stringify(meta),
-                  },
-                ],
-              },
-            ], `${meta.ticket_key} 처리 실패`);
-          } catch { /* ignore */ }
+          if (String(err).includes("SESSION_EXPIRED")) {
+            await sendDM(
+              `:warning: QueryPie 세션이 만료되었습니다.\n쿠키를 갱신해주세요: \`POST /api/querypie/set-cookies\``,
+              pmUserId,
+            );
+          } else {
+            console.error(`[extract_${extractType}] error:`, err);
+            await sendDM(`❌ *${meta.ticket_key}* 오류: ${String(err).slice(0, 200)}`, pmUserId);
+          }
         }
       })();
 

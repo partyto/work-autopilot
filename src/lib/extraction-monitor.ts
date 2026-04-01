@@ -87,6 +87,7 @@ export async function runExtractionMonitor(overrideChannel?: string) {
         thread_ts: threadTs,
         channel: targetChannel,
         permalink,
+        requester_id: msg.user, // 원본 요청자 — 추출 완료 시 DM으로 비밀번호 안내
       });
 
       await sendBlockDM(duty.slack_id, [
