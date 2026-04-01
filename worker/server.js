@@ -1,5 +1,5 @@
 // QueryPie Playwright Worker — 사내망 Mac에서 실행
-// NAS 봇이 POST /extract { sql } 호출 → QueryPie에서 데이터 추출 → xlsx Buffer 반환
+// NAS 봇의 Job Queue를 폴링하여 QueryPie 추출 수행 후 결과 반환
 const http = require("http");
 const { chromium } = require("playwright");
 const fs = require("fs");
@@ -7,6 +7,8 @@ const path = require("path");
 const unzipper = require("unzipper");
 
 const PORT = process.env.PORT || 3200;
+const NAS_URL = process.env.NAS_URL || "http://115.21.223.89:3100";
+const POLL_INTERVAL = 15000; // 15초
 const SESSION_PATH = path.join(__dirname, "session.json");
 const QUERYPIE_BASE = "https://querypie.infra.wadcorp.in";
 const ZIP_PASSWORD = "qwer1234!";
@@ -50,21 +52,6 @@ async function extractXlsxFromZip(zipBuffer, password) {
   return await xlsxFile.buffer(password);
 }
 
-function parseBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString()));
-      } catch (e) {
-        reject(e);
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
 // ─── Playwright extraction ───
 
 async function extractFromQueryPie(sql) {
@@ -80,12 +67,10 @@ async function extractFromQueryPie(sql) {
     await context.addCookies(cookies);
     const page = await context.newPage();
 
-    // 1. QueryPie 접속 + 세션 확인
     console.log("[Worker] QueryPie 접속 중...");
     await page.goto(QUERYPIE_BASE, { waitUntil: "networkidle", timeout: 30000 });
     if (isAuthPage(page.url())) throw new Error("SESSION_EXPIRED");
 
-    // 2. SQL Worksheet 이동
     console.log("[Worker] SQL Editor 이동...");
     await page.goto(`${QUERYPIE_BASE}/sql-editor`, {
       waitUntil: "networkidle",
@@ -93,13 +78,11 @@ async function extractFromQueryPie(sql) {
     });
     if (isAuthPage(page.url())) throw new Error("SESSION_EXPIRED");
 
-    // 3. 에디터 대기
     await page.waitForSelector(
       ".CodeMirror, .cm-editor, [data-testid='sql-editor'], textarea.sql-input",
       { timeout: 20000 },
     );
 
-    // 4. SQL 입력
     console.log("[Worker] SQL 입력 중...");
     const editorSelectors = [
       ".CodeMirror textarea",
@@ -120,7 +103,6 @@ async function extractFromQueryPie(sql) {
     }
     if (!typed) throw new Error("SQL 에디터를 찾을 수 없습니다 — 선택자 확인 필요");
 
-    // 5. 실행
     console.log("[Worker] 쿼리 실행...");
     await page
       .locator(
@@ -129,14 +111,12 @@ async function extractFromQueryPie(sql) {
       .first()
       .click();
 
-    // 6. 결과 대기 (최대 90초)
     console.log("[Worker] 결과 대기...");
     await page.waitForSelector(
       '.result-table, .data-grid, [data-testid="result-table"], .ant-table-tbody, .ag-center-cols-container',
       { timeout: 90000 },
     );
 
-    // 7. Export
     console.log("[Worker] Export 실행...");
     await page
       .locator(
@@ -145,11 +125,9 @@ async function extractFromQueryPie(sql) {
       .first()
       .click();
 
-    // 8. 비밀번호 입력
     await page.waitForSelector('input[type="password"]', { timeout: 10000 });
     await page.locator('input[type="password"]').first().fill(ZIP_PASSWORD);
 
-    // 9. 다운로드
     console.log("[Worker] 다운로드 대기...");
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 60000 }),
@@ -164,7 +142,6 @@ async function extractFromQueryPie(sql) {
     const zipStream = await download.createReadStream();
     const zipBuffer = await streamToBuffer(zipStream);
 
-    // 10. ZIP 해제 → xlsx
     console.log("[Worker] ZIP 해제 중...");
     return await extractXlsxFromZip(zipBuffer, ZIP_PASSWORD);
   } finally {
@@ -172,19 +149,100 @@ async function extractFromQueryPie(sql) {
   }
 }
 
-// ─── HTTP Server ───
+// ─── Job Polling ───
+
+let polling = false;
+
+async function pollForJobs() {
+  if (polling) return;
+  polling = true;
+
+  try {
+    const res = await fetch(`${NAS_URL}/api/extraction-jobs`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+
+    if (!data.job) {
+      polling = false;
+      return;
+    }
+
+    const job = data.job;
+    console.log(`[Worker] 🔔 Job 수신: ${job.ticket_key} (${job.extract_type})`);
+
+    if (!isSessionConfigured()) {
+      console.log("[Worker] ❌ 세션 미설정 — Job 실패 처리");
+      await submitResult(job.id, null, "SESSION_NOT_CONFIGURED — Worker에 쿠키를 등록해주세요");
+      polling = false;
+      return;
+    }
+
+    try {
+      const xlsxBuffer = await extractFromQueryPie(job.sql);
+      console.log(`[Worker] ✅ 추출 완료: ${xlsxBuffer.length} bytes`);
+      await submitResult(job.id, xlsxBuffer, null);
+    } catch (err) {
+      console.error(`[Worker] ❌ 추출 오류:`, err.message);
+      await submitResult(job.id, null, err.message);
+    }
+  } catch (err) {
+    // NAS 연결 실패 — 조용히 무시 (다음 폴링에서 재시도)
+    if (!String(err).includes("timeout")) {
+      console.error("[Worker] NAS 연결 오류:", err.message);
+    }
+  }
+
+  polling = false;
+}
+
+async function submitResult(jobId, xlsxBuffer, error) {
+  try {
+    const body = { job_id: jobId };
+    if (xlsxBuffer) body.xlsx = xlsxBuffer.toString("base64");
+    if (error) body.error = error;
+
+    const res = await fetch(`${NAS_URL}/api/extraction-jobs/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    const data = await res.json();
+    if (!res.ok) console.error("[Worker] 결과 전송 실패:", data.error);
+    else console.log(`[Worker] 결과 전송 완료: job ${jobId.slice(0, 8)}`);
+  } catch (err) {
+    console.error("[Worker] 결과 전송 오류:", err.message);
+  }
+}
+
+// ─── HTTP Server (쿠키 관리 + 상태) ───
+
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString()));
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on("error", reject);
+  });
+}
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   res.setHeader("Content-Type", "application/json");
 
-  // GET /health
   if (req.method === "GET" && url.pathname === "/health") {
-    res.end(JSON.stringify({ ok: true, session: isSessionConfigured() }));
+    res.end(JSON.stringify({ ok: true, session: isSessionConfigured(), nas: NAS_URL }));
     return;
   }
 
-  // POST /set-cookies
   if (req.method === "POST" && url.pathname === "/set-cookies") {
     try {
       const body = await parseBody(req);
@@ -202,42 +260,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // POST /extract
-  if (req.method === "POST" && url.pathname === "/extract") {
-    try {
-      const body = await parseBody(req);
-      if (!body.sql) {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ error: "sql 필드 필요" }));
-        return;
-      }
-      if (!isSessionConfigured()) {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ error: "SESSION_NOT_CONFIGURED" }));
-        return;
-      }
-
-      console.log(`[Worker] 추출 시작: ${body.sql.slice(0, 80)}...`);
-      const xlsxBuffer = await extractFromQueryPie(body.sql);
-      console.log(`[Worker] 추출 완료: ${xlsxBuffer.length} bytes`);
-
-      res.end(JSON.stringify({ ok: true, xlsx: xlsxBuffer.toString("base64") }));
-    } catch (e) {
-      console.error("[Worker] 추출 오류:", e.message);
-      res.statusCode = 500;
-      res.end(JSON.stringify({ error: String(e.message || e) }));
-    }
-    return;
-  }
-
   res.statusCode = 404;
   res.end(JSON.stringify({ error: "not found" }));
 });
 
 server.listen(PORT, () => {
   console.log(`[QueryPie Worker] http://localhost:${PORT}`);
-  console.log(`  - GET  /health      — 상태 확인`);
+  console.log(`  - NAS: ${NAS_URL}`);
+  console.log(`  - 폴링 간격: ${POLL_INTERVAL / 1000}초`);
+  console.log(`  - 세션: ${isSessionConfigured() ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`  - POST /set-cookies — 쿠키 등록`);
-  console.log(`  - POST /extract     — SQL 추출`);
-  console.log(`  - 세션 상태: ${isSessionConfigured() ? "✅ 설정됨" : "❌ 미설정"}`);
+  console.log("");
+
+  // 폴링 시작
+  setInterval(pollForJobs, POLL_INTERVAL);
+  console.log("[Worker] Job 폴링 시작...");
 });

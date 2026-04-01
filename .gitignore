@@ -25,3 +25,4 @@ Thumbs.db
 
 # Deployment packages
 work-autopilot-nas-*.tar.gz
+worker/session.json
