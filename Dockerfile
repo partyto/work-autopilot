@@ -24,20 +24,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # start.js (스케줄러 래퍼)
 COPY --chown=nextjs:nodejs start.js ./
 
-# Playwright용 시스템 Chromium (Alpine 패키지 사용 — 별도 다운로드 없음)
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
-
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-
-# node-cron, playwright, unzipper (standalone에 미포함)
-RUN npm install node-cron playwright unzipper
+# node-cron (start.js에서 사용, standalone에 미포함)
+RUN npm install node-cron
 
 # DB 파일용 디렉토리
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data

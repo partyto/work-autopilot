@@ -1,12 +1,9 @@
-// POST /api/querypie/set-cookies — QueryPie 세션 쿠키 저장
-// 브라우저 DevTools에서 복사한 쿠키 배열을 data/querypie-session.json에 저장
+// POST /api/querypie/set-cookies — Worker로 쿠키 프록시
+// 브라우저 DevTools에서 복사한 쿠키를 사내망 Worker에 전달
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+import { setWorkerCookies, isSessionConfigured } from "@/lib/querypie";
 
 export const dynamic = "force-dynamic";
-
-const SESSION_PATH = path.join(process.cwd(), "data", "querypie-session.json");
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,9 +17,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    fs.mkdirSync(path.dirname(SESSION_PATH), { recursive: true });
-    fs.writeFileSync(SESSION_PATH, JSON.stringify(cookies, null, 2), "utf-8");
-
+    await setWorkerCookies(cookies);
     return NextResponse.json({ ok: true, count: cookies.length });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -31,11 +26,8 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   try {
-    if (!fs.existsSync(SESSION_PATH)) {
-      return NextResponse.json({ configured: false });
-    }
-    const cookies = JSON.parse(fs.readFileSync(SESSION_PATH, "utf-8"));
-    return NextResponse.json({ configured: true, count: cookies.length });
+    const configured = await isSessionConfigured();
+    return NextResponse.json({ configured });
   } catch {
     return NextResponse.json({ configured: false });
   }

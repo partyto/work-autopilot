@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
 
       // Slack 3초 제한 → 즉시 응답, 비동기로 파이프라인 실행
       void (async () => {
-        if (!isSessionConfigured()) {
+        if (!(await isSessionConfigured())) {
           await sendDM(
             `:warning: QueryPie 세션이 설정되지 않았습니다.\n\`POST /api/querypie/set-cookies\`로 쿠키를 등록해주세요.`,
             pmUserId,
