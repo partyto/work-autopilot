@@ -321,12 +321,18 @@ async function scanSlackMentions(): Promise<{
       .filter(Boolean)
   );
 
+  // help-* 채널은 CS/운영 채널이므로 TO-DO 감지 대상에서 제외
+  const EXCLUDED_CHANNEL_PREFIXES = ["help-"];
+
   for (const mention of recentMentions.slice(0, 10)) {
     const text = mention.text || "";
     const channelName = mention.channel?.name || "DM";
     const permalink = mention.permalink || "";
     const threadTs = mention.ts;
     const channelId = mention.channel?.id;
+
+    // help-* 채널 제외 (비즈서비스, 정보보안 등 CS/운영 채널)
+    if (EXCLUDED_CHANNEL_PREFIXES.some((prefix) => channelName.startsWith(prefix))) continue;
 
     // 이모지 전용 메시지 제외 (:emoji_name: 또는 유니코드 이모지만 있는 경우)
     const strippedForEmojiCheck = text

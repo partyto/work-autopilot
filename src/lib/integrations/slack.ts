@@ -46,6 +46,8 @@ export async function sendDM(text: string, userId = SLACK_USER_ID) {
     channel: channelId,
     text,
     mrkdwn: true,
+    unfurl_links: false,
+    unfurl_media: false,
   });
 
   return { channelId, ts: msgRes.ts };
