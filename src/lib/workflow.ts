@@ -4,7 +4,7 @@ import { eq, and, lt, gte } from "drizzle-orm";
 import { generateId, nowLocal, todayDate } from "@/lib/utils";
 import * as slack from "@/lib/integrations/slack";
 import { runDailyScan } from "@/lib/engine";
-import { formatWorkingDate, prevWorkingDay, toKSTDateStr } from "@/lib/holidays";
+import { formatWorkingDate, prevWorkingDay, toKSTDateStr, toBusinessDateStr } from "@/lib/holidays";
 
 const PRIORITY_LABEL: Record<string, string> = { high: "높음", medium: "보통", low: "낮음" };
 const STATUS_LABEL: Record<string, string> = {
@@ -15,7 +15,7 @@ const STATUS_LABEL: Record<string, string> = {
 // ===== EOD (하루 마무리) =====
 export async function runEndOfDay(): Promise<{ message: string }> {
   const today = new Date();
-  const todayStr = toKSTDateStr(today);
+  const todayStr = toBusinessDateStr(today); // 5시 이전은 전날로 취급
 
   const allTasks = await db.query.tasks.findMany({
     where: (t) => and(
@@ -142,7 +142,7 @@ export async function runEndOfDay(): Promise<{ message: string }> {
 // ===== SOD (하루 시작) =====
 export async function runStartOfDay(): Promise<{ message: string }> {
   const today = new Date();
-  const todayStr = toKSTDateStr(today);
+  const todayStr = toBusinessDateStr(today); // 5시 이전은 전날로 취급
 
   // 어제(직전 워킹 데이) EOD 데이터 조회
   const yesterday = prevWorkingDay(today);
@@ -287,9 +287,25 @@ export async function runStartOfDay(): Promise<{ message: string }> {
   return { message };
 }
 
+// ===== SOD 버튼 — Slack 발송 없이 DB에만 기록 (넛지 스킵 목적) =====
+export async function recordStartOfDay(): Promise<void> {
+  const todayStr = toBusinessDateStr(new Date());
+  await db.insert(schema.workflowLogs).values({
+    id: generateId(),
+    type: "sod",
+    date: todayStr,
+    summary: JSON.stringify({ manual: true }),
+    createdAt: nowLocal(),
+  }).onConflictDoUpdate({
+    target: [schema.workflowLogs.date, schema.workflowLogs.type],
+    set: { summary: JSON.stringify({ manual: true }), createdAt: nowLocal() },
+  });
+  console.log(`[Workflow] SOD recorded (no Slack) for ${todayStr}`);
+}
+
 // ===== SOD 완료 여부 확인 =====
 export async function hasTodaySOD(): Promise<boolean> {
-  const todayStr = toKSTDateStr(new Date());
+  const todayStr = toBusinessDateStr(new Date());
   const log = await db.query.workflowLogs.findFirst({
     where: (w) => and(eq(w.date, todayStr), eq(w.type, "sod")),
   });

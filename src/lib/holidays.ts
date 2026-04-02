@@ -43,6 +43,21 @@ export function toKSTDateStr(date: Date): string {
   return kst.toISOString().slice(0, 10);
 }
 
+/**
+ * 영업일 기준 날짜 문자열 — KST 05:00 이전은 전날로 취급
+ * (새벽에 마무리/시작을 눌러도 업무일 경계를 5시 기준으로 처리)
+ */
+export function toBusinessDateStr(date: Date): string {
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const kstHour = kst.getUTCHours(); // UTC 기준 KST시간 = KST 시각
+  if (kstHour < 5) {
+    // 전날로 처리
+    const prev = new Date(kst.getTime() - 24 * 60 * 60 * 1000);
+    return prev.toISOString().slice(0, 10);
+  }
+  return kst.toISOString().slice(0, 10);
+}
+
 /** 주말(토/일) 또는 공휴일이 아닌 워킹 데이 여부 */
 export function isWorkingDay(date: Date): boolean {
   const dow = date.getDay(); // 0=일, 6=토

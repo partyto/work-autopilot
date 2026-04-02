@@ -209,8 +209,30 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleWorkflow = (type: "eod" | "sod") => {
-    if (type === "eod") setEodModalOpen(true);
+  const handleWorkflow = async (type: "eod" | "sod") => {
+    if (type === "eod") {
+      setEodModalOpen(true);
+      return;
+    }
+    // SOD: Slack 발송 없이 DB 기록만 (10시 넛지 스킵)
+    setWorkflowRunning("sod");
+    try {
+      const res = await fetch("/api/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "sod" }),
+      });
+      if (res.ok) {
+        toast.success("하루 시작이 기록되었습니다.");
+        fetchWorkflowStatus();
+      } else {
+        toast.error("하루 시작 기록 실패");
+      }
+    } catch {
+      toast.error("하루 시작 기록 실패");
+    } finally {
+      setWorkflowRunning(null);
+    }
   };
 
   const handleWorkflowSent = useCallback(() => {
@@ -384,6 +406,20 @@ export default function Dashboard() {
           <ConnStatus label="Scheduler" connected={scanStatus?.scheduler} />
         </div>
         <div className="flex items-center gap-2">
+          {/* 하루 시작 */}
+          <button
+            onClick={() => handleWorkflow("sod")}
+            disabled={!!workflowRunning}
+            className={cn(
+              "flex items-center gap-1 px-3 py-1.5 text-[13px] font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50",
+              workflowStatus?.nextAction === "sod"
+                ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-dim)]"
+                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+            )}
+          >
+            <Sunrise size={12} />
+            {workflowRunning === "sod" ? "처리중..." : "시작"}
+          </button>
           {/* 하루 마무리 */}
           <button
             onClick={() => handleWorkflow("eod")}

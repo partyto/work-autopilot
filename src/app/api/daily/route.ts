@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, desc } from "drizzle-orm";
-import { runEndOfDay, runStartOfDay } from "@/lib/workflow";
-import { isWorkingDay, nextWorkingDay, prevWorkingDay, toKSTDateStr } from "@/lib/holidays";
+import { runEndOfDay, recordStartOfDay } from "@/lib/workflow";
+import { isWorkingDay, nextWorkingDay, toBusinessDateStr } from "@/lib/holidays";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +12,9 @@ function computeWorkflowStatus(
   lastSodDate: string | null,
 ) {
   const now = new Date();
-  const todayStr = toKSTDateStr(now);
-  const nowHour = now.getHours() + now.getMinutes() / 60; // KST 시간 (서버가 KST 기준)
+  const todayStr = toBusinessDateStr(now); // 5시 이전은 전날로 취급
+  const kstMs = now.getTime() + 9 * 60 * 60 * 1000;
+  const kstHour = new Date(kstMs).getUTCHours() + new Date(kstMs).getUTCMinutes() / 60;
 
   // 다음 EOD: 오늘이 워킹 데이고 EOD 미실행 + 아직 19시 안됐으면 오늘, 아니면 다음 워킹 데이
   const eodDoneToday = lastEodDate === todayStr;
@@ -21,21 +22,17 @@ function computeWorkflowStatus(
     if (!eodDoneToday && isWorkingDay(now)) {
       return todayStr;
     }
-    return toKSTDateStr(nextWorkingDay(now));
+    return toBusinessDateStr(nextWorkingDay(now));
   })();
   const nextEodTime = `${nextEodDate}T19:00:00+09:00`;
 
   // 다음 SOD: 오늘이 워킹 데이고 SOD 미실행 + 아직 10시 안됐으면 오늘, 아니면 다음 워킹 데이
   const sodDoneToday = lastSodDate === todayStr;
   const nextSodDate = (() => {
-    if (!sodDoneToday && isWorkingDay(now) && nowHour < 10) {
+    if (!sodDoneToday && isWorkingDay(now) && kstHour >= 5) {
       return todayStr;
     }
-    if (!sodDoneToday && isWorkingDay(now) && nowHour < 19) {
-      // SOD 아직 안됐는데 10시 이후 → 오늘
-      return todayStr;
-    }
-    return toKSTDateStr(nextWorkingDay(now));
+    return toBusinessDateStr(nextWorkingDay(now));
   })();
   const nextSodTime = `${nextSodDate}T10:00:00+09:00`;
 
@@ -101,8 +98,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "type은 'eod' 또는 'sod'여야 합니다" }, { status: 400 });
     }
 
-    const result = type === "eod" ? await runEndOfDay() : await runStartOfDay();
-    return NextResponse.json({ success: true, message: result.message });
+    if (type === "eod") {
+      const result = await runEndOfDay();
+      return NextResponse.json({ success: true, message: result.message });
+    } else {
+      // SOD: Slack 없이 DB 기록만 (10시 넛지 스킵 목적)
+      await recordStartOfDay();
+      return NextResponse.json({ success: true, message: "하루 시작이 기록되었습니다." });
+    }
   } catch (err) {
     console.error("[API/daily] POST error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
