@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { runDailyScan, executeApprovedActions } from "./engine";
-import { runEndOfDay, runStartOfDay, hasTodaySOD, sendSODNudge } from "./workflow";
+import { hasTodaySOD, sendSODNudge } from "./workflow";
 import { isWorkingDay } from "./holidays";
 import { runExtractionMonitor } from "./extraction-monitor";
 
@@ -41,21 +41,6 @@ export function initScheduler() {
       console.log(`[Scheduler] SOD nudge sent`);
     } catch (error) {
       console.error("[Scheduler] SOD check/nudge failed:", error);
-    }
-  }, {
-    timezone: "Asia/Seoul",
-  });
-
-  // 매일 19:00 KST — 일일 업무 리포트 Slack 발송 (공휴일 제외)
-  cron.schedule("0 19 * * 1-5", async () => {
-    if (!isWorkingDay(new Date())) return;
-    console.log(`[Scheduler] Daily report started at ${new Date().toISOString()}`);
-    try {
-      await runDailyScan(true); // 일일 업무 리포트 DM 발송
-      await executeApprovedActions();
-      console.log(`[Scheduler] Daily report completed`);
-    } catch (error) {
-      console.error("[Scheduler] Daily report failed:", error);
     }
   }, {
     timezone: "Asia/Seoul",
