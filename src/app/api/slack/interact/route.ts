@@ -39,7 +39,7 @@ function verifySlackSignature(
 
 // ─── shop_seq → Job 생성 공통 함수 ───
 async function createExtractionJob(params: {
-  extractType: string;
+  extractType: "marketing" | "notice";
   extractLabel: string;
   shopSeq: string;
   shopSeqSource: string;
@@ -291,7 +291,7 @@ export async function POST(req: NextRequest) {
     // ─── 탭 선택 후 추출 진행 ───
     if (actionId.startsWith("extract_tab_select_")) {
       const meta = value;
-      const extractType = meta.extract_type;
+      const extractType = meta.extract_type as "marketing" | "notice";
       const extractLabel = extractType === "marketing" ? "마케팅 수신용" : "공지성 수신용";
 
       try {
