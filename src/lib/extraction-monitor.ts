@@ -31,11 +31,11 @@ export async function runExtractionMonitor(overrideChannel?: string) {
   const targetChannel = overrideChannel || HELP_CHANNEL;
   const isTest = !!overrideChannel;
 
-  // 채널 히스토리 조회 (last_checked_ts 이후, 테스트 채널이면 전체 조회)
+  // 채널 히스토리 조회 (테스트 채널이면 최근 10개만)
   const messages = await getChannelHistory(
     targetChannel,
     isTest ? undefined : (state.last_checked_ts || undefined),
-    100,
+    isTest ? 10 : 100,
   );
 
   if (!messages.length) return;
