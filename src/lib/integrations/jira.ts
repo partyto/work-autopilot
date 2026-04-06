@@ -45,7 +45,7 @@ export async function searchIssues(jql: string, maxResults = 50) {
 
 // 단일 이슈 조회
 export async function getIssue(issueKey: string) {
-  return jiraFetch(`/issue/${issueKey}?fields=summary,status,priority,duedate,updated`);
+  return jiraFetch(`/issue/${issueKey}?fields=summary,status,priority,duedate,updated,description`);
 }
 
 // 이슈 전환 가능 목록 조회
