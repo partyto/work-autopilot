@@ -1,11 +1,31 @@
 import { getIssue } from "@/lib/integrations/jira";
 
+// ─── Types ───
+
+export interface SheetTab {
+  sheetId: number;
+  title: string;
+}
+
+export interface SheetExtractionSuccess {
+  type: "success";
+  shopSeq: string;
+  tabName: string;
+}
+
+export interface SheetTabSelectionNeeded {
+  type: "select_tab";
+  tabs: SheetTab[];
+  spreadsheetId: string;
+}
+
+export type SheetExtractionResult = SheetExtractionSuccess | SheetTabSelectionNeeded | null;
+
 // ─── Google OAuth2 Refresh Token 인증 ───
 
 let cachedToken: { access_token: string; expires_at: number } | null = null;
 
 async function getAccessToken(): Promise<string> {
-  // 캐시된 토큰이 유효하면 재사용
   if (cachedToken && cachedToken.expires_at > Date.now() + 60000) {
     return cachedToken.access_token;
   }
@@ -42,31 +62,53 @@ async function getAccessToken(): Promise<string> {
 
 // ─── Google Sheets URL 파싱 ───
 
-export function parseGoogleSheetsUrl(text: string): { spreadsheetId: string; gid: string } | null {
+export function parseGoogleSheetsUrl(text: string): {
+  spreadsheetId: string;
+  gid: string;
+  hasExplicitGid: boolean;
+} | null {
   const match = text.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (!match) return null;
   const gidMatch = text.match(/gid=(\d+)/);
-  return { spreadsheetId: match[1], gid: gidMatch?.[1] || "0" };
+  return {
+    spreadsheetId: match[1],
+    gid: gidMatch?.[1] || "0",
+    hasExplicitGid: !!gidMatch,
+  };
 }
 
-// ─── 시트 데이터에서 shop_seq 추출 ───
+// ─── 시트 탭 목록 조회 ───
 
-export async function fetchShopSeqFromSheet(spreadsheetId: string, gid: string): Promise<string> {
+async function getSheetTabs(spreadsheetId: string): Promise<SheetTab[]> {
   const token = await getAccessToken();
-
-  // 시트 메타데이터 조회 (gid → 시트명)
   const metaRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!metaRes.ok) throw new Error(`Sheets meta error: ${metaRes.status}`);
   const meta = await metaRes.json();
-  const sheet = meta.sheets?.find(
-    (s: { properties: { sheetId: number } }) => String(s.properties.sheetId) === gid,
-  );
-  const sheetName = sheet?.properties?.title || "Sheet1";
+  return (meta.sheets || []).map((s: { properties: { sheetId: number; title: string } }) => ({
+    sheetId: s.properties.sheetId,
+    title: s.properties.title,
+  }));
+}
 
-  // 전체 데이터 조회
+// ─── 특정 탭에서 shop_seq 추출 ───
+
+export async function fetchShopSeqFromSheet(spreadsheetId: string, gid: string): Promise<string> {
+  const token = await getAccessToken();
+
+  // gid → 시트명 변환
+  const tabs = await getSheetTabs(spreadsheetId);
+  const sheet = tabs.find((t) => String(t.sheetId) === gid);
+  const sheetName = sheet?.title || "Sheet1";
+
+  return fetchShopSeqByTabName(spreadsheetId, sheetName);
+}
+
+async function fetchShopSeqByTabName(spreadsheetId: string, sheetName: string): Promise<string> {
+  const token = await getAccessToken();
+
   const dataRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
     { headers: { Authorization: `Bearer ${token}` } },
@@ -113,14 +155,13 @@ export async function fetchShopSeqFromSheet(spreadsheetId: string, gid: string):
   return shopSeqValues.join(",");
 }
 
-// ─── JIRA 이슈에서 Google Sheet → shop_seq 추출 (통합 함수) ───
+// ─── JIRA 이슈에서 Google Sheet → shop_seq 추출 (다중 탭 지원) ───
 
-export async function extractShopSeqFromJira(ticketKey: string): Promise<string | null> {
+export async function extractShopSeqFromJira(ticketKey: string): Promise<SheetExtractionResult> {
   try {
     const issue = await getIssue(ticketKey);
     if (!issue?.fields?.description) return null;
 
-    // description에서 Google Sheets URL 찾기 (plain text 또는 ADF JSON)
     const desc =
       typeof issue.fields.description === "string"
         ? issue.fields.description
@@ -133,16 +174,62 @@ export async function extractShopSeqFromJira(ticketKey: string): Promise<string 
     }
 
     console.log(`[google-sheets] ${ticketKey}: 시트 ${sheetInfo.spreadsheetId} (gid=${sheetInfo.gid})`);
-    const shopSeq = await fetchShopSeqFromSheet(sheetInfo.spreadsheetId, sheetInfo.gid);
 
-    if (!shopSeq) {
-      console.log(`[google-sheets] ${ticketKey}: shop_seq 컬럼을 찾지 못했습니다`);
+    const tabs = await getSheetTabs(sheetInfo.spreadsheetId);
+
+    // 탭이 1개면 바로 추출
+    if (tabs.length === 1) {
+      const shopSeq = await fetchShopSeqByTabName(sheetInfo.spreadsheetId, tabs[0].title);
+      if (!shopSeq) {
+        console.log(`[google-sheets] ${ticketKey}: shop_seq 컬럼을 찾지 못했습니다`);
+        return null;
+      }
+      console.log(`[google-sheets] ${ticketKey}: shop_seq ${shopSeq.split(",").length}개 추출 (탭: ${tabs[0].title})`);
+      return { type: "success", shopSeq, tabName: tabs[0].title };
+    }
+
+    // 탭이 여러 개인 경우
+    console.log(`[google-sheets] ${ticketKey}: ${tabs.length}개 탭 발견 — ${tabs.map((t) => t.title).join(", ")}`);
+
+    // URL에 명시적 gid가 있으면 해당 탭 먼저 시도
+    if (sheetInfo.hasExplicitGid) {
+      const targetTab = tabs.find((t) => String(t.sheetId) === sheetInfo.gid);
+      if (targetTab) {
+        const shopSeq = await fetchShopSeqByTabName(sheetInfo.spreadsheetId, targetTab.title);
+        if (shopSeq) {
+          console.log(`[google-sheets] ${ticketKey}: URL gid 탭에서 shop_seq ${shopSeq.split(",").length}개 추출 (탭: ${targetTab.title})`);
+          return { type: "success", shopSeq, tabName: targetTab.title };
+        }
+      }
+    }
+
+    // 모든 탭에서 shop_seq 검색
+    const tabsWithShopSeq: SheetTab[] = [];
+    for (const tab of tabs) {
+      const shopSeq = await fetchShopSeqByTabName(sheetInfo.spreadsheetId, tab.title);
+      if (shopSeq) {
+        tabsWithShopSeq.push(tab);
+      }
+    }
+
+    if (tabsWithShopSeq.length === 0) {
+      console.log(`[google-sheets] ${ticketKey}: 어떤 탭에서도 shop_seq를 찾지 못했습니다`);
       return null;
     }
 
-    const count = shopSeq.split(",").length;
-    console.log(`[google-sheets] ${ticketKey}: shop_seq ${count}개 추출`);
-    return shopSeq;
+    if (tabsWithShopSeq.length === 1) {
+      const shopSeq = await fetchShopSeqByTabName(sheetInfo.spreadsheetId, tabsWithShopSeq[0].title);
+      console.log(`[google-sheets] ${ticketKey}: shop_seq ${shopSeq.split(",").length}개 추출 (탭: ${tabsWithShopSeq[0].title})`);
+      return { type: "success", shopSeq, tabName: tabsWithShopSeq[0].title };
+    }
+
+    // 여러 탭에 shop_seq가 있음 → 사용자 선택 필요
+    console.log(`[google-sheets] ${ticketKey}: ${tabsWithShopSeq.length}개 탭에 shop_seq 존재 — 사용자 선택 필요`);
+    return {
+      type: "select_tab",
+      tabs: tabsWithShopSeq,
+      spreadsheetId: sheetInfo.spreadsheetId,
+    };
   } catch (err) {
     console.error(`[google-sheets] ${ticketKey} 오류:`, err);
     return null;

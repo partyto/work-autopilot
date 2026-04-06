@@ -1,16 +1,16 @@
-// #help-정보보안 채널 모니터링 — 비즈-PM 멘션 감지 → 당번 알림
-import { getDutyState, getCurrentDuty, saveDutyState } from "./duty-rotation";
+// #help-정보보안 채널 모니터링 — @파트라슈 멘션 감지 → 요청자에게 추출 유형 DM
+import { getDutyState, saveDutyState } from "./duty-rotation";
 import {
   getChannelHistory,
   getThreadReplies,
   getPermalink,
-  postBlockMessage,
   sendBlockDM,
 } from "./integrations/slack";
 import { slackApi } from "./integrations/slack";
 
 const HELP_CHANNEL = "C07DAP4TL5T"; // #help-정보보안
-const BIZ_PM_MENTION = "<!subteam^S07CRFNDZD4>"; // 비즈-PM 그룹
+const BOT_USER_ID = "U0AMXD1CKS8"; // @파트라슈
+const BOT_MENTION = `<@${BOT_USER_ID}>`;
 
 function parseJiraTicket(text: string): string | null {
   const match = text.match(/SCR-\d+/i);
@@ -28,7 +28,6 @@ function parseShopSeq(text: string): string {
 
 export async function runExtractionMonitor(overrideChannel?: string) {
   const state = getDutyState();
-  const duty = getCurrentDuty(state);
   const targetChannel = overrideChannel || HELP_CHANNEL;
   const isTest = !!overrideChannel;
 
@@ -46,8 +45,8 @@ export async function runExtractionMonitor(overrideChannel?: string) {
   let newProcessed = [...(state.processed_threads || [])];
 
   for (const msg of messages) {
-    // 비즈-PM 멘션이 포함된 메시지만 처리
-    if (!msg.text?.includes(BIZ_PM_MENTION)) continue;
+    // @파트라슈 멘션이 포함된 메시지만 처리
+    if (!msg.text?.includes(BOT_MENTION)) continue;
 
     // thread_ts: 스레드 답글이면 thread_ts, 아니면 msg.ts
     const threadTs = msg.thread_ts || msg.ts;
@@ -56,7 +55,6 @@ export async function runExtractionMonitor(overrideChannel?: string) {
     if (newProcessed.includes(threadTs)) continue;
 
     try {
-
       // 스레드 전체 읽기 (실패 시 메시지 원문으로 폴백)
       let fullText = msg.text || "";
       try {
@@ -72,30 +70,30 @@ export async function runExtractionMonitor(overrideChannel?: string) {
 
       const permalink = await getPermalink(targetChannel, threadTs);
 
-      // 1) 스레드에 당번 멘션 답글
+      // 1) 스레드에 확인 답글
       await slackApi("chat.postMessage", {
         channel: targetChannel,
         thread_ts: threadTs,
-        text: `<@${duty.slack_id}> 확인 부탁드립니다! :eyes:`,
+        text: `:dog: 확인했습니다! <@${msg.user}>님에게 DM으로 추출 유형 선택을 안내드리겠습니다.`,
         mrkdwn: true,
       });
 
-      // 2) 당번 PM에게 추출 유형 선택 버튼 DM
+      // 2) 요청자에게 추출 유형 선택 버튼 DM
       const metadata = JSON.stringify({
         ticket_key: ticketKey,
         shop_seq: shopSeq,
         thread_ts: threadTs,
         channel: targetChannel,
         permalink,
-        requester_id: msg.user, // 원본 요청자 — 추출 완료 시 DM으로 비밀번호 안내
+        requester_id: msg.user,
       });
 
-      await sendBlockDM(duty.slack_id, [
+      await sendBlockDM(msg.user, [
         {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `:bell: *새 데이터 추출 요청*\n\n:ticket: JIRA: <https://catchtable.atlassian.net/browse/${ticketKey}|${ticketKey}>\n:department_store: shop_seq: \`${shopSeq || "확인 필요"}\`\n:link: <${permalink}|Slack 스레드 보기>`,
+            text: `:bell: *새 데이터 추출 요청*\n\n:ticket: JIRA: <https://catchtable.atlassian.net/browse/${ticketKey}|${ticketKey}>\n:department_store: shop_seq: \`${shopSeq || "자동 추출 예정"}\`\n:link: <${permalink}|Slack 스레드 보기>`,
           },
         },
         {
@@ -104,20 +102,20 @@ export async function runExtractionMonitor(overrideChannel?: string) {
           elements: [
             {
               type: "button",
-              text: { type: "plain_text", text: "1️⃣ 마케팅 수신용", emoji: true },
+              text: { type: "plain_text", text: "1\uFE0F\u20E3 마케팅 수신용", emoji: true },
               style: "primary",
               action_id: "extract_marketing",
               value: metadata,
             },
             {
               type: "button",
-              text: { type: "plain_text", text: "2️⃣ 공지성 수신용", emoji: true },
+              text: { type: "plain_text", text: "2\uFE0F\u20E3 공지성 수신용", emoji: true },
               action_id: "extract_notice",
               value: metadata,
             },
             {
               type: "button",
-              text: { type: "plain_text", text: "3️⃣ 그 외", emoji: true },
+              text: { type: "plain_text", text: "3\uFE0F\u20E3 그 외", emoji: true },
               style: "danger",
               action_id: "extract_other",
               value: metadata,
@@ -127,7 +125,7 @@ export async function runExtractionMonitor(overrideChannel?: string) {
       ], `${ticketKey} 추출 요청 — 유형을 선택해주세요`);
 
       newProcessed.push(threadTs);
-      console.log(`[ExtractionMonitor] Processed thread ${threadTs} (${ticketKey})`);
+      console.log(`[ExtractionMonitor] Processed thread ${threadTs} (${ticketKey}) → DM to ${msg.user}`);
     } catch (err) {
       console.error(`[ExtractionMonitor] Failed to process thread ${threadTs}:`, err);
     }
@@ -135,6 +133,6 @@ export async function runExtractionMonitor(overrideChannel?: string) {
 
   // state 업데이트
   state.last_checked_ts = latestTs;
-  state.processed_threads = newProcessed.slice(-100); // 최대 100개 유지
+  state.processed_threads = newProcessed.slice(-100);
   saveDutyState(state);
 }
