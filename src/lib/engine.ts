@@ -228,7 +228,7 @@ async function _runDailyScanInternal(sendReport: boolean): Promise<{
         const alertLines = [
           `⚡ *새 액션 ${newlyProposedActions.length}건 제안됨 — 승인이 필요합니다*`,
           ...newlyProposedActions.map((d) => `• ${d}`),
-          `\n👉 대시보드에서 확인하세요.`,
+          `\n👉 <${process.env.APP_URL ?? "http://localhost:3100"}/#actions|대시보드에서 승인하기>`,
         ];
         await slack.sendDM(alertLines.join("\n")).catch((err) => console.error("[Engine] Alert DM failed:", err));
       }
@@ -258,7 +258,7 @@ async function _runDailyScanInternal(sendReport: boolean): Promise<{
       const alertLines = [
         `⚡ *새 액션 ${newlyProposedActions.length}건 제안됨 — 승인이 필요합니다*`,
         ...newlyProposedActions.map((d) => `• ${d}`),
-        `\n👉 대시보드에서 확인하세요.`,
+        `\n👉 <${process.env.APP_URL ?? "http://localhost:3100"}/#actions|대시보드에서 승인하기>`,
       ];
       await slack.sendDM(alertLines.join("\n")).catch((err) => console.error("[Engine] Alert DM failed:", err));
     }
