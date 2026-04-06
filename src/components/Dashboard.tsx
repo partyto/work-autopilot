@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import TaskForm from "./TaskForm";
 import TaskCard from "./TaskCard";
 import ActionCard from "./ActionCard";
+import WorkflowSODModal from "./WorkflowSODModal";
 import WorkflowEODModal from "./WorkflowEODModal";
 
 type TaskWithLinks = {
@@ -159,6 +160,7 @@ export default function Dashboard() {
   const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set());
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
   const [workflowRunning, setWorkflowRunning] = useState<"eod" | "sod" | null>(null);
+  const [sodModalOpen, setSodModalOpen] = useState(false);
   const [eodModalOpen, setEodModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -209,33 +211,13 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleWorkflow = async (type: "eod" | "sod") => {
-    if (type === "eod") {
-      setEodModalOpen(true);
-      return;
-    }
-    // SOD: Slack 발송 없이 DB 기록만 (10시 넛지 스킵)
-    setWorkflowRunning("sod");
-    try {
-      const res = await fetch("/api/daily", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "sod" }),
-      });
-      if (res.ok) {
-        toast.success("하루 시작이 기록되었습니다.");
-        fetchWorkflowStatus();
-      } else {
-        toast.error("하루 시작 기록 실패");
-      }
-    } catch {
-      toast.error("하루 시작 기록 실패");
-    } finally {
-      setWorkflowRunning(null);
-    }
+  const handleWorkflow = (type: "eod" | "sod") => {
+    if (type === "sod") setSodModalOpen(true);
+    else setEodModalOpen(true);
   };
 
   const handleWorkflowSent = useCallback(() => {
+    setSodModalOpen(false);
     setEodModalOpen(false);
     fetchWorkflowStatus();
     handleRefreshAll();
@@ -448,6 +430,11 @@ export default function Dashboard() {
       </div>
 
       {/* ── 모달 ── */}
+      <AnimatePresence>
+        {sodModalOpen && (
+          <WorkflowSODModal onClose={() => setSodModalOpen(false)} onSent={handleWorkflowSent} />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {eodModalOpen && (
           <WorkflowEODModal onClose={() => setEodModalOpen(false)} onSent={handleWorkflowSent} />

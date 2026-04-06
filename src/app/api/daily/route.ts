@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, desc } from "drizzle-orm";
-import { runEndOfDay, recordStartOfDay } from "@/lib/workflow";
+import { runEndOfDay, runStartOfDay } from "@/lib/workflow";
 import { isWorkingDay, nextWorkingDay, toBusinessDateStr } from "@/lib/holidays";
 
 export const dynamic = "force-dynamic";
@@ -98,14 +98,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "type은 'eod' 또는 'sod'여야 합니다" }, { status: 400 });
     }
 
-    if (type === "eod") {
-      const result = await runEndOfDay();
-      return NextResponse.json({ success: true, message: result.message });
-    } else {
-      // SOD: Slack 없이 DB 기록만 (10시 넛지 스킵 목적)
-      await recordStartOfDay();
-      return NextResponse.json({ success: true, message: "하루 시작이 기록되었습니다." });
-    }
+    const result = type === "eod" ? await runEndOfDay() : await runStartOfDay();
+    return NextResponse.json({ success: true, message: result.message });
   } catch (err) {
     console.error("[API/daily] POST error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
