@@ -13,6 +13,7 @@ import {
   generateSQL,
 } from "@/lib/duty-rotation";
 import { createJob } from "@/lib/extraction-jobs";
+import { extractShopSeqFromJira, isGoogleSheetsConfigured } from "@/lib/google-sheets";
 
 export const dynamic = "force-dynamic";
 
@@ -170,11 +171,37 @@ export async function POST(req: NextRequest) {
       const extractType = actionId === "extract_marketing" ? "marketing" : "notice";
       const extractLabel = actionId === "extract_marketing" ? "마케팅 수신용" : "공지성 수신용";
       const meta = value;
-      const sql = generateSQL(extractType, meta.shop_seq);
+
+      // shop_seq 결정: JIRA 구글시트 → Slack 메시지 파싱 순서
+      let shopSeq = meta.shop_seq || "";
+      let shopSeqSource = "slack";
+
+      if (meta.ticket_key && isGoogleSheetsConfigured()) {
+        try {
+          const sheetShopSeq = await extractShopSeqFromJira(meta.ticket_key);
+          if (sheetShopSeq) {
+            shopSeq = sheetShopSeq;
+            shopSeqSource = "google-sheet";
+          }
+        } catch (err) {
+          console.error("[interact] Google Sheets shop_seq 추출 실패:", err);
+        }
+      }
+
+      if (!shopSeq) {
+        await sendDM(
+          `⚠️ *${meta.ticket_key}* shop_seq를 찾을 수 없습니다.\nJIRA 이슈에 Google Sheets 링크가 있는지, 시트에 shop_seq 컬럼이 있는지 확인해주세요.`,
+          user.id,
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      const sql = generateSQL(extractType, shopSeq);
+      const shopSeqCount = shopSeq.split(",").length;
 
       const job = createJob({
         ticket_key: meta.ticket_key,
-        shop_seq: meta.shop_seq || "",
+        shop_seq: shopSeq,
         extract_type: extractType,
         thread_ts: meta.thread_ts || "",
         channel: meta.channel || "",
@@ -189,13 +216,13 @@ export async function POST(req: NextRequest) {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `:clipboard: *${meta.ticket_key} 추출 요청*\n\n:hourglass_flowing_sand: *${extractLabel}* 선택됨 — Worker 대기 중...\nshop_seq: \`${meta.shop_seq || "확인 필요"}\`\njob: \`${job.id.slice(0, 8)}\``,
+            text: `:clipboard: *${meta.ticket_key} 추출 요청*\n\n:hourglass_flowing_sand: *${extractLabel}* 선택됨 — Worker 대기 중...\nshop_seq: ${shopSeqCount}개 (${shopSeqSource})\njob: \`${job.id.slice(0, 8)}\``,
           },
         },
       ], `${meta.ticket_key} — ${extractLabel} Worker 대기 중`);
 
       await sendDM(
-        `⏳ *${meta.ticket_key}* 추출 요청이 등록되었습니다. Worker가 처리할 예정입니다.`,
+        `⏳ *${meta.ticket_key}* 추출 요청이 등록되었습니다.\nshop_seq: ${shopSeqCount}개 (${shopSeqSource}에서 추출)\nWorker가 처리할 예정입니다.`,
         user.id,
       );
 
