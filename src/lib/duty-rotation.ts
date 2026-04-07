@@ -9,6 +9,7 @@ export interface DutyMember {
   slack_id: string;
   email: string;
   index: number;
+  jira_account_id: string | null;
 }
 
 export interface DutyState {
@@ -30,10 +31,10 @@ export interface DutyState {
 
 const DEFAULT_STATE: DutyState = {
   members: [
-    { name: "주현우", slack_id: "U042YQ0RUAY", email: "hw.joo@catchtable.co.kr", index: 0 },
-    { name: "옥동민", slack_id: "U021C8DFPH8", email: "d.ok@catchtable.co.kr", index: 1 },
-    { name: "황유진", slack_id: "U08Q1AFBC3E", email: "youjin.h@catchtable.co.kr", index: 2 },
-    { name: "임미연", slack_id: "U0357K6GQNN", email: "my.lim@catchtable.co.kr", index: 3 },
+    { name: "주현우", slack_id: "U042YQ0RUAY", email: "hw.joo@catchtable.co.kr", index: 0, jira_account_id: "63d8cbafc2b1cb6b346f8ab4" },
+    { name: "옥동민", slack_id: "U021C8DFPH8", email: "d.ok@catchtable.co.kr", index: 1, jira_account_id: "63d8cb6efb75f8568f5ee308" },
+    { name: "황유진", slack_id: "U08Q1AFBC3E", email: "youjin.h@catchtable.co.kr", index: 2, jira_account_id: "712020:23cf070e-eecc-4864-92e5-5014c318e9ae" },
+    { name: "임미연", slack_id: "U0357K6GQNN", email: "my.lim@catchtable.co.kr", index: 3, jira_account_id: "63d8cbecc2b1cb6b346f8ad0" },
   ],
   current_week: "",
   current_duty_index: 0,
