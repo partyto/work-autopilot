@@ -9,8 +9,7 @@ import {
 import { slackApi } from "./integrations/slack";
 
 const HELP_CHANNEL = "C07DAP4TL5T"; // #help-정보보안
-const BOT_USER_ID = "U0AMXD1CKS8"; // @파트라슈
-const BOT_MENTION = `<@${BOT_USER_ID}>`;
+const BIZPM_GROUP_MENTION = "<!subteam^S07CRFNDZD4>"; // @비즈-예약PM
 
 function parseJiraTicket(text: string): string | null {
   const match = text.match(/SCR-\d+/i);
@@ -45,8 +44,8 @@ export async function runExtractionMonitor(overrideChannel?: string) {
   let newProcessed = [...(state.processed_threads || [])];
 
   for (const msg of messages) {
-    // @파트라슈 멘션이 포함된 메시지만 처리
-    if (!msg.text?.includes(BOT_MENTION)) continue;
+    // @비즈-예약PM 그룹 멘션이 포함된 메시지만 처리
+    if (!msg.text?.includes(BIZPM_GROUP_MENTION)) continue;
 
     // thread_ts: 스레드 답글이면 thread_ts, 아니면 msg.ts
     const threadTs = msg.thread_ts || msg.ts;
@@ -57,9 +56,16 @@ export async function runExtractionMonitor(overrideChannel?: string) {
     try {
       // 스레드 전체 읽기 (실패 시 메시지 원문으로 폴백)
       let fullText = msg.text || "";
+      let threadStarterId = msg.user;
       try {
         const thread = await getThreadReplies(targetChannel, threadTs);
-        if (thread.length > 0) fullText = thread.map((m: any) => m.text || "").join("\n");
+        if (thread.length > 0) {
+          fullText = thread.map((m: any) => m.text || "").join("\n");
+          // 스레드 원작성자 파악
+          if (msg.thread_ts && msg.thread_ts !== msg.ts) {
+            threadStarterId = thread[0].user || msg.user;
+          }
+        }
       } catch {
         // 스레드가 없는 단독 메시지면 msg.text 사용
       }
@@ -86,6 +92,7 @@ export async function runExtractionMonitor(overrideChannel?: string) {
         channel: targetChannel,
         permalink,
         requester_id: msg.user,
+        thread_starter_id: threadStarterId,
       });
 
       await sendBlockDM(msg.user, [

@@ -15,6 +15,7 @@ export interface ExtractionJob {
   channel: string;
   requester_id: string;
   pm_user_id: string;
+  thread_starter_id?: string;
   sql: string;
   created_at: string;
   error?: string;

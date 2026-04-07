@@ -26,16 +26,12 @@ export async function POST(req: NextRequest) {
     if (error) {
       markFailed(job_id, error);
 
-      if (error.includes("SESSION_EXPIRED")) {
-        await sendDM(
-          `:warning: QueryPie 세션이 만료되었습니다. 쿠키를 갱신해주세요.`,
-          job.pm_user_id,
-        );
-      } else {
-        await sendDM(
-          `❌ *${job.ticket_key}* 추출 오류: ${error.slice(0, 200)}`,
-          job.pm_user_id,
-        );
+      // 스레드에 @비즈-예약PM 멘션 답글
+      if (job.thread_ts && job.channel) {
+        const errMsg = error.includes("SESSION_EXPIRED")
+          ? `<!subteam^S07CRFNDZD4> *${job.ticket_key}* 추출에 실패하였습니다. QueryPie 세션이 만료되었으니 직접 추출해주세요.`
+          : `<!subteam^S07CRFNDZD4> *${job.ticket_key}* 추출에 실패하였습니다. 직접 추출해주세요.\n오류: ${error.slice(0, 100)}`;
+        await replyToThread(job.channel, job.thread_ts, errMsg);
       }
       return NextResponse.json({ ok: true });
     }
@@ -61,7 +57,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. 원본 요청자에게 비밀번호 DM
+    // 4. 요청자에게 비밀번호 포함 DM
     if (job.requester_id) {
       await sendDM(
         `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`1234abcd\``,
@@ -69,8 +65,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. 당번 PM에게 완료 DM
-    await sendDM(`✅ *${job.ticket_key}* 처리 완료!`, job.pm_user_id);
+    // 5. 스레드 원작성자가 요청자와 다른 경우 추가 DM
+    if (job.thread_starter_id && job.thread_starter_id !== job.requester_id) {
+      await sendDM(
+        `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`1234abcd\``,
+        job.thread_starter_id,
+      );
+    }
 
     markCompleted(job_id);
     return NextResponse.json({ ok: true });

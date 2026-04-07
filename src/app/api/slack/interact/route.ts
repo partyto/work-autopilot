@@ -60,6 +60,7 @@ async function createExtractionJob(params: {
     channel: meta.channel || "",
     requester_id: meta.requester_id || userId,
     pm_user_id: userId,
+    thread_starter_id: meta.thread_starter_id,
     sql,
   });
 
