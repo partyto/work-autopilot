@@ -45,25 +45,38 @@ const DEFAULT_STATE: DutyState = {
   last_checked_ts: null,
   processed_threads: [],
   sql_templates: {
-    marketing: `select distinct tsm.shop_seq, tsm.shop_name as '매장명', AES_DECRYPT(FROM_BASE64(tse.enc_employee_info), '암호확인중') as '담당자(대표연락처)명', AES_DECRYPT(FROM_BASE64(enc_employee_contact_info), 'tablenote414!@#$') as '담당자 전화번호',
-tse.can_send_sms_yn as '문자 발신 가능 번호', tse.memo as '메모'
-from tn_shop_master tsm
-left join tn_shop_employee tse on tse.shop_seq = tsm.shop_seq
-left join biz_terms_shop bts on bts.shop_id = tse.shop_seq
-where tsm.state='a'
-and tsm.inhouse_yn = 'n'
-and tsm.chain_level = 'a'
-and tse.sms_marketing_yn = 'y'
-and tse.represent_yn = 'y'
-and bts.is_agree = '1'
-and bts.term_type = 'MARKETING'
-and tsm.shop_seq in ({shop_seq_list})
+    marketing: `SELECT DISTINCT
+    tsm.shop_seq,
+    tsm.shop_name AS '매장명',
+    tse.employee_info AS '담당자(대표연락처)명',
+    tse.employee_contact_info AS '담당자 전화번호',
+    tse.can_send_sms_yn AS '문자 발신 가능 번호',
+    tse.memo AS '메모',
+    tse.represent_yn AS '대표담당자여부',
+    tse.sms_marketing_yn AS '1차-마케팅수신동의',
+    CASE
+        WHEN bts.is_agree = '1' THEN '수신동의'
+        WHEN bts.is_agree = '0' THEN '미동의'
+        WHEN bts.is_agree IS NULL THEN '미참여'
+        ELSE '알수없음'
+    END AS '2차-마케팅문자수신동의'
+FROM tn_shop_master tsm
+LEFT JOIN tn_shop_employee tse ON tse.shop_seq = tsm.shop_seq
+LEFT JOIN biz_terms_shop bts ON bts.shop_id = tse.shop_seq
+WHERE tsm.state = 'a'
+    AND tsm.inhouse_yn = 'n'
+    AND tsm.chain_level = 'a'
+    AND tse.sms_marketing_yn = 'y'
+    AND tse.represent_yn = 'y'
+    AND bts.is_agree = '1'
+    AND bts.term_type = 'MARKETING'
+    AND tsm.shop_seq IN ({shop_seq_list})
 ;`,
     notice: `SELECT
     tsm.shop_seq,
     tsm.shop_name AS '매장명',
-    AES_DECRYPT(FROM_BASE64(tse.enc_employee_info), '암호확인중') AS '담당자(대표연락처)명',
-    AES_DECRYPT(FROM_BASE64(enc_employee_contact_info), 'tablenote414!@#$') AS '담당자 전화번호',
+    tse.employee_info AS '담당자(대표연락처)명',
+    tse.employee_contact_info AS '담당자 전화번호',
     tse.can_send_sms_yn AS '담당자-문자발신가능번호',
     tse.memo AS '메모',
     tse.represent_yn AS '대표담당자여부',
@@ -80,14 +93,14 @@ LEFT JOIN tn_shop_employee tse ON tse.shop_seq = tsm.shop_seq
 LEFT JOIN (
     SELECT shop_id, MAX(is_agree) as is_agree
     FROM biz_terms_shop
-        WHERE term_type = 'MARKETING'
+    WHERE term_type = 'MARKETING'
     GROUP BY shop_id
 ) bts ON bts.shop_id = tsm.shop_seq
 WHERE 1=1
     AND tsm.state = 'a'
     AND tsm.inhouse_yn = 'n'
     AND tsm.chain_level = 'a'
-AND tsm.shop_seq IN ({shop_seq_list})
+    AND tsm.shop_seq IN ({shop_seq_list})
 ;`,
   },
   announcement_channel: "C08PN7A9R0X",
