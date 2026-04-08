@@ -436,9 +436,11 @@ async function doExtraction(page, browser, sql) {
       console.log("[Worker]    네트워크 응답에서 유효한 데이터를 찾지 못함");
     }
 
-    // 방법 1: LIMIT/OFFSET 분할 쿼리로 전체 데이터 수집
-    // 단일 쿼리에서 React fiber는 120행만 보유 → 100행씩 분할 추출
-    console.log("[Worker] LIMIT/OFFSET 분할 추출 시작...");
+    // shop_seq 청킹으로 전체 데이터 수집
+    // - IN 절을 100개씩 나눠 실행 → 결과가 ~100행으로 가상화 한계(120행) 이내 보장
+    // - IN 절 소형화(2640→100)로 쿼리 실행 속도도 향상
+    console.log("[Worker] shop_seq 청킹 추출 시작...");
+
     const readVisibleData = async () => {
       return page.evaluate(() => {
         const grid = document.querySelector('.qp-datagrid');
@@ -470,12 +472,20 @@ async function doExtraction(page, browser, sql) {
       return rows;
     };
 
-    const batchSize = 500;
-    const allRows = [];
-    const baseSql = sql.replace(/;\s*$/, ''); // 세미콜론 제거
+    // SQL에서 IN 절 shop_seq 목록 추출
+    const inMatch = sql.match(/shop_seq\s+IN\s*\(([^)]+)\)/i);
+    if (!inMatch) throw new Error('SQL에서 shop_seq IN 절을 찾을 수 없습니다');
+    const allShopSeqs = inMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    const sqlTemplate = sql.replace(/shop_seq\s+IN\s*\([^)]+\)/i, 'shop_seq IN (__CHUNK__)');
+    const seqChunkSize = 100;
+    const totalBatches = Math.ceil(allShopSeqs.length / seqChunkSize);
+    console.log(`[Worker]    총 shop_seq: ${allShopSeqs.length}개 → ${totalBatches}배치 (100개씩)`);
 
-    for (let offset = 0; offset < 50000; offset += batchSize) {
-      const chunkSql = `${baseSql} ORDER BY 1 LIMIT ${batchSize} OFFSET ${offset};`;
+    const allRows = [];
+    for (let i = 0; i < allShopSeqs.length; i += seqChunkSize) {
+      const chunk = allShopSeqs.slice(i, i + seqChunkSize);
+      const chunkSql = sqlTemplate.replace('__CHUNK__', chunk.join(','));
+      const batchNum = Math.floor(i / seqChunkSize) + 1;
 
       // 실행 전 현재 status 캡처 (변화 감지용)
       const prevStatus = await page.evaluate(() => {
@@ -483,31 +493,33 @@ async function doExtraction(page, browser, sql) {
         return el ? el.textContent.trim() : null;
       });
 
-      // 에디터 클리어 + 새 SQL 입력
+      // 에디터 클리어 + 새 SQL 입력 (Monaco API 우선 시도)
       await editorArea.click();
       await page.waitForTimeout(200);
       await page.keyboard.press("Meta+a");
       await page.waitForTimeout(100);
       await page.keyboard.press("Backspace");
       await page.waitForTimeout(200);
-      await page.evaluate((text) => {
+      const monacoOk = await page.evaluate((text) => {
+        const editors = window.monaco?.editor?.getEditors?.();
+        if (editors?.length > 0) { editors[0].setValue(text); return true; }
         document.execCommand('insertText', false, text);
+        return false;
       }, chunkSql);
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(monacoOk ? 100 : 300);
 
       // 실행
       await editorArea.click();
       await page.keyboard.press("Meta+Enter");
 
-      // 결과 대기 — QueryPie는 대용량 쿼리 시 "0 items fetched"를 임시 표시하므로
-      // 1초 초기 대기 후, 500ms 간격으로 폴링. "0 items"는 1.5초 안정 확인 후 수용
-      await page.waitForTimeout(1000);
+      // 결과 대기: 100개 IN 절은 빠르게 실행되므로 0.5초 초기 대기, 300ms 폴링
+      await page.waitForTimeout(500);
       const chunkStart = Date.now();
       let chunkReady = false;
       let lastStatusText = '';
       let lastStatusChangedAt = chunkStart;
 
-      while (Date.now() - chunkStart < 30000) {
+      while (Date.now() - chunkStart < 20000) {
         const statusText = await page.evaluate(() => {
           const el = document.querySelector('.qp-datagrid-page-status');
           return el ? el.textContent.trim() : '';
@@ -519,34 +531,22 @@ async function doExtraction(page, browser, sql) {
         const match = statusText.match(/(\d+)\s*items?\s*fetched/);
         if (match) {
           const count = parseInt(match[1]);
-          // N>0이면 즉시 확정; 0이면 1.5초 안정 후 확정 (임시 표시 구분)
-          if (count > 0 || Date.now() - lastStatusChangedAt > 1500) {
+          if (count > 0 || Date.now() - lastStatusChangedAt > 1000) {
             chunkReady = true;
             break;
           }
         }
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(300);
       }
 
-      if (!chunkReady) await page.waitForTimeout(3000); // 타임아웃 시 여유 대기
-      await page.waitForTimeout(300); // 렌더링 대기
+      if (!chunkReady) await page.waitForTimeout(2000);
+      await page.waitForTimeout(200);
 
       // React fiber에서 데이터 추출
       const chunkData = await readVisibleData();
       const chunkRows = extractReactRows(chunkData);
-
-      if (chunkRows.length === 0) {
-        console.log(`[Worker]    OFFSET ${offset} — 0행 → 추출 완료`);
-        break;
-      }
-
       allRows.push(...chunkRows);
-      console.log(`[Worker]    OFFSET ${offset} — ${chunkRows.length}행 (누적 ${allRows.length}행)`);
-
-      if (chunkRows.length < batchSize) {
-        console.log(`[Worker]    마지막 배치 (${chunkRows.length} < ${batchSize}) → 추출 완료`);
-        break;
-      }
+      console.log(`[Worker]    배치 ${batchNum}/${totalBatches} — ${chunkRows.length}행 (누적 ${allRows.length}행)`);
     }
 
     if (allRows.length > 0) {
