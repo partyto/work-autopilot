@@ -499,19 +499,37 @@ async function doExtraction(page, browser, sql) {
       await editorArea.click();
       await page.keyboard.press("Meta+Enter");
 
-      // 결과 대기 — waitForFunction으로 이벤트 기반 감지 (고정 2초 대기 제거)
-      try {
-        await page.waitForFunction((prev) => {
+      // 결과 대기 — QueryPie는 대용량 쿼리 시 "0 items fetched"를 임시 표시하므로
+      // 1초 초기 대기 후, 500ms 간격으로 폴링. "0 items"는 1.5초 안정 확인 후 수용
+      await page.waitForTimeout(1000);
+      const chunkStart = Date.now();
+      let chunkReady = false;
+      let lastStatusText = '';
+      let lastStatusChangedAt = chunkStart;
+
+      while (Date.now() - chunkStart < 30000) {
+        const statusText = await page.evaluate(() => {
           const el = document.querySelector('.qp-datagrid-page-status');
-          if (!el) return false;
-          const text = el.textContent.trim();
-          if (text === prev) return false; // 이전 결과 그대로
-          return /\d+\s*items?\s*fetched/.test(text);
-        }, prevStatus, { timeout: 30000 });
-      } catch {
-        // 타임아웃 — 그래도 추출 시도
+          return el ? el.textContent.trim() : '';
+        });
+        if (statusText !== lastStatusText) {
+          lastStatusText = statusText;
+          lastStatusChangedAt = Date.now();
+        }
+        const match = statusText.match(/(\d+)\s*items?\s*fetched/);
+        if (match) {
+          const count = parseInt(match[1]);
+          // N>0이면 즉시 확정; 0이면 1.5초 안정 후 확정 (임시 표시 구분)
+          if (count > 0 || Date.now() - lastStatusChangedAt > 1500) {
+            chunkReady = true;
+            break;
+          }
+        }
+        await page.waitForTimeout(500);
       }
-      await page.waitForTimeout(300); // 짧은 렌더링 대기
+
+      if (!chunkReady) await page.waitForTimeout(3000); // 타임아웃 시 여유 대기
+      await page.waitForTimeout(300); // 렌더링 대기
 
       // React fiber에서 데이터 추출
       const chunkData = await readVisibleData();
