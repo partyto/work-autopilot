@@ -293,17 +293,36 @@ async function doExtraction(page, browser, sql) {
     await page.screenshot({ path: path.join(__dirname, "debug-after-run.png") });
 
     // 10. 결과 대기 — 폴링으로 "items fetched" 감지 (최대 120초)
+    // 주의: 대용량 쿼리는 QueryPie가 "0 items fetched"를 일시적으로 표시하므로
+    //       비-0 카운트가 나올 때까지 계속 폴링, 0이 안정적으로 유지되면(10초) 실제 0건으로 판단
     console.log("[Worker] 결과 대기...");
     const resultStart = Date.now();
     let resultFound = false;
     let fetchedCount = 0;
+    let zeroSince = 0; // 0건이 처음 감지된 시각
     while (Date.now() - resultStart < 120000) {
       const bodyText = await page.evaluate(() => document.body.innerText);
       const match = bodyText.match(/(\d+)\s*items?\s*fetched/);
       if (match) {
-        fetchedCount = parseInt(match[1], 10);
-        resultFound = true;
-        break;
+        const count = parseInt(match[1], 10);
+        if (count > 0) {
+          // 비-0 결과 → 확정
+          fetchedCount = count;
+          resultFound = true;
+          break;
+        } else {
+          // 0건 감지 — 대용량 쿼리 로딩 중일 수 있으므로 10초간 더 대기
+          if (zeroSince === 0) zeroSince = Date.now();
+          if (Date.now() - zeroSince >= 10000) {
+            // 10초 동안 계속 0 → 실제 0건으로 확정
+            fetchedCount = 0;
+            resultFound = true;
+            break;
+          }
+        }
+      } else {
+        // 아직 결과 없음 → zeroSince 리셋 (로딩 중에 숫자가 사라질 수 있음)
+        zeroSince = 0;
       }
       if (bodyText.includes("rows affected")) {
         resultFound = true;
@@ -319,29 +338,7 @@ async function doExtraction(page, browser, sql) {
     await page.screenshot({ path: path.join(__dirname, "debug-result-area.png") });
 
     if (fetchedCount === 0) {
-      // 원래 쿼리가 0건 → 테스트용 간단 쿼리로 재시도하여 파이프라인 검증
-      console.log("[Worker] 0건 — 테스트 쿼리로 파이프라인 검증...");
-      await editorArea.click();
-      await page.waitForTimeout(300);
-      await page.keyboard.press("Meta+a");
-      await page.waitForTimeout(200);
-      await page.keyboard.press("Backspace");
-      await page.waitForTimeout(200);
-      await page.evaluate((text) => {
-        document.execCommand('insertText', false, text);
-      }, "SELECT 70956 as shop_seq, 'TEST_SHOP' as shop_name, 'TEST_PERSON' as contact_name, '010-0000-0000' as phone");
-      await page.waitForTimeout(300);
-      await editorArea.click();
-      await page.keyboard.press("Meta+Enter");
-      await page.waitForTimeout(5000);
-
-      const retryText = await page.evaluate(() => document.body.innerText);
-      const retryMatch = retryText.match(/(\d+)\s*items?\s*fetched/);
-      fetchedCount = retryMatch ? parseInt(retryMatch[1], 10) : 0;
-      console.log(`[Worker]    테스트 쿼리 결과: ${fetchedCount}건`);
-      if (fetchedCount === 0) {
-        throw new Error("테스트 쿼리도 0건 — SQL Editor 상태 확인 필요");
-      }
+      throw new Error("쿼리 결과가 0건입니다 — SQL 또는 shop_seq 조건 확인 필요");
     }
 
     // 11. qp-datagrid에서 헤더 추출 + 그리드 클릭 → Ctrl+A → Ctrl+C로 데이터 복사
