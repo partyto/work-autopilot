@@ -106,12 +106,15 @@ export async function searchMentions(query: string, count = 20) {
 
 // 채널 메시지 히스토리 (스레드 확인용)
 export async function getThreadReplies(channelId: string, threadTs: string) {
-  const data = await slackApi("conversations.replies", {
-    channel: channelId,
-    ts: threadTs,
-    limit: 100,
+  // conversations.replies는 JSON body를 지원하지 않으므로 GET query string으로 호출
+  await throttle();
+  const params = new URLSearchParams({ channel: channelId, ts: threadTs, limit: "100" });
+  const res = await fetch(`https://slack.com/api/conversations.replies?${params}`, {
+    headers: { Authorization: `Bearer ${SLACK_TOKEN}` },
   });
-  return data.messages || [];
+  const data = await res.json();
+  if (!data.ok) throw new Error(`Slack API error: ${data.error}`);
+  return (data.messages || []) as any[];
 }
 
 // Block Kit 메시지 전송
