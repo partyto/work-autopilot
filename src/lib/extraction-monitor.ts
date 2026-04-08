@@ -43,31 +43,55 @@ export async function runExtractionMonitor(overrideChannel?: string) {
   const latestTs = messages[0].ts;
   let newProcessed = [...(state.processed_threads || [])];
 
-  for (const msg of messages) {
-    // @비즈-예약PM 그룹 멘션이 포함된 메시지만 처리
-    if (!msg.text?.includes(BIZPM_GROUP_MENTION)) continue;
+  // 채널 메시지 + 스레드 답글까지 포함한 후보 목록 구성
+  // conversations.history는 최상위 메시지만 반환하므로
+  // reply_count > 0인 메시지는 스레드 답글도 확인
+  type Candidate = { msg: any; threadTs: string; threadStarterId: string };
+  const candidates: Candidate[] = [];
 
-    // thread_ts: 스레드 답글이면 thread_ts, 아니면 msg.ts
+  for (const msg of messages) {
     const threadTs = msg.thread_ts || msg.ts;
 
+    // 최상위 메시지 자체에 멘션이 있으면 바로 후보 추가
+    if (msg.text?.includes(BIZPM_GROUP_MENTION)) {
+      candidates.push({ msg, threadTs, threadStarterId: msg.user });
+      continue;
+    }
+
+    // 스레드가 있는 메시지는 답글 스캔
+    if (msg.reply_count > 0 && !newProcessed.includes(threadTs)) {
+      try {
+        const replies = await getThreadReplies(targetChannel, threadTs);
+        for (const reply of replies) {
+          if (reply.text?.includes(BIZPM_GROUP_MENTION)) {
+            // 스레드 원작성자 = 첫 번째 메시지 작성자
+            const threadStarterId = replies[0]?.user || msg.user;
+            candidates.push({ msg: reply, threadTs, threadStarterId });
+            break; // 스레드당 1번만 처리
+          }
+        }
+      } catch {
+        // 스레드 조회 실패 시 스킵
+      }
+    }
+  }
+
+  for (const { msg, threadTs, threadStarterId: initialThreadStarter } of candidates) {
     // 이미 처리한 스레드 스킵
     if (newProcessed.includes(threadTs)) continue;
 
     try {
-      // 스레드 전체 읽기 (실패 시 메시지 원문으로 폴백)
+      // 스레드 전체 텍스트 합치기 (JIRA 티켓/shop_seq 파싱용)
       let fullText = msg.text || "";
-      let threadStarterId = msg.user;
+      let threadStarterId = initialThreadStarter;
       try {
         const thread = await getThreadReplies(targetChannel, threadTs);
         if (thread.length > 0) {
           fullText = thread.map((m: any) => m.text || "").join("\n");
-          // 스레드 원작성자 파악
-          if (msg.thread_ts && msg.thread_ts !== msg.ts) {
-            threadStarterId = thread[0].user || msg.user;
-          }
+          threadStarterId = thread[0].user || initialThreadStarter;
         }
       } catch {
-        // 스레드가 없는 단독 메시지면 msg.text 사용
+        // 폴백: msg.text 사용
       }
 
       // JIRA 티켓 파싱
