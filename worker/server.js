@@ -436,92 +436,112 @@ async function doExtraction(page, browser, sql) {
       console.log("[Worker]    네트워크 응답에서 유효한 데이터를 찾지 못함");
     }
 
-    // 방법 1 (최우선): Export 버튼 클릭 → CSV 다운로드
-    console.log("[Worker] Export 버튼으로 전체 데이터 다운로드 시도...");
-    try {
-      const exportBtn = page.locator('button:has-text("Export"), [title="Export"]').first();
-      if ((await exportBtn.count()) > 0) {
-        const [download] = await Promise.all([
-          page.waitForEvent('download', { timeout: 30000 }),
-          exportBtn.click(),
-        ]);
-        const downloadPath = await download.path();
-        const suggestedName = download.suggestedFilename();
-        console.log(`[Worker]    Export 다운로드 완료: ${suggestedName} → ${downloadPath}`);
-
-        const downloadedData = fs.readFileSync(downloadPath);
-
-        // CSV인 경우 파싱 → XLSX 변환
-        if (suggestedName.endsWith('.csv') || suggestedName.endsWith('.tsv')) {
-          const csvText = downloadedData.toString('utf-8');
-          const delimiter = suggestedName.endsWith('.tsv') ? '\t' : ',';
-          const lines = csvText.trim().split('\n');
-          const csvHeaders = lines[0].split(delimiter).map(h => h.replace(/^"|"$/g, '').trim());
-          const rows = lines.slice(1).map(line => line.split(delimiter).map(c => c.replace(/^"|"$/g, '').trim()));
-          console.log(`[Worker]    CSV 파싱: ${csvHeaders.length}열, ${rows.length}행`);
-          const wsData = [csvHeaders, ...rows];
-          const ws = XLSX.utils.aoa_to_sheet(wsData);
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, "추출결과");
-          const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-          console.log(`[Worker] XLSX 생성 완료 (Export CSV): ${xlsxBuffer.length} bytes, ${rows.length}행`);
-          return xlsxBuffer;
+    // 방법 1: LIMIT/OFFSET 분할 쿼리로 전체 데이터 수집
+    // 단일 쿼리에서 React fiber는 120행만 보유 → 100행씩 분할 추출
+    console.log("[Worker] LIMIT/OFFSET 분할 추출 시작...");
+    const readVisibleData = async () => {
+      return page.evaluate(() => {
+        const grid = document.querySelector('.qp-datagrid');
+        if (!grid) return null;
+        const fiberKey = Object.keys(grid).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
+        if (!fiberKey) return null;
+        let fiber = grid[fiberKey];
+        for (let i = 0; i < 20 && fiber; i++) {
+          const props = fiber.memoizedProps || fiber.pendingProps;
+          if (props?.data !== undefined && (props.columns !== undefined || props.dataLength !== undefined)) {
+            return JSON.parse(JSON.stringify(props.data));
+          }
+          fiber = fiber.return;
         }
+        return null;
+      });
+    };
 
-        // XLSX/XLS인 경우 그대로 반환
-        if (suggestedName.endsWith('.xlsx') || suggestedName.endsWith('.xls')) {
-          console.log(`[Worker] XLSX 다운로드 완료 (Export): ${downloadedData.length} bytes`);
-          return downloadedData;
-        }
-
-        // 기타 형식 — 바이너리로 반환
-        console.log(`[Worker]    기타 형식 (${suggestedName}): ${downloadedData.length} bytes`);
-        return downloadedData;
-      } else {
-        console.log("[Worker]    Export 버튼 없음");
-      }
-    } catch (exportErr) {
-      console.log(`[Worker]    Export 실패: ${String(exportErr).slice(0, 200)}`);
-    }
-
-    // 방법 2 (폴백): React fiber에서 보이는 데이터 추출
-    console.log("[Worker] Export 실패 — React fiber 폴백...");
-    const reactData = await page.evaluate(() => {
-      const grid = document.querySelector('.qp-datagrid');
-      if (!grid) return null;
-      const fiberKey = Object.keys(grid).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
-      if (!fiberKey) return null;
-      let fiber = grid[fiberKey];
-      for (let i = 0; i < 20 && fiber; i++) {
-        const props = fiber.memoizedProps || fiber.pendingProps;
-        if (props?.data !== undefined && (props.columns !== undefined || props.dataLength !== undefined)) {
-          return JSON.parse(JSON.stringify(props.data));
-        }
-        fiber = fiber.return;
-      }
-      return null;
-    });
-
-    if (reactData && typeof reactData === 'object') {
-      const keys = Object.keys(reactData).filter(k => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
+    const extractReactRows = (data) => {
       const rows = [];
+      if (!data || typeof data !== 'object') return rows;
+      const keys = Object.keys(data).filter(k => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
       for (const key of keys) {
-        const row = reactData[key];
+        const row = data[key];
         if (row?.value && Array.isArray(row.value)) {
           rows.push(row.value.map(cell => cell?.n ? '' : String(cell?.v ?? '')));
         }
       }
-      if (rows.length > 0) {
-        let dataHeaders = headers;
-        if (dataHeaders.length === 0) dataHeaders = rows[0].map((_, i) => `col_${i}`);
-        const wsData = [dataHeaders, ...rows];
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "추출결과");
-        const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-        console.log(`[Worker] XLSX 생성 완료 (React 폴백): ${xlsxBuffer.length} bytes, ${rows.length}행`);
-        return xlsxBuffer;
+      return rows;
+    };
+
+    const batchSize = 500;
+    const allRows = [];
+    const baseSql = sql.replace(/;\s*$/, ''); // 세미콜론 제거
+
+    for (let offset = 0; offset < 50000; offset += batchSize) {
+      const chunkSql = `${baseSql} ORDER BY 1 LIMIT ${batchSize} OFFSET ${offset};`;
+
+      // 실행 전 현재 status 캡처 (변화 감지용)
+      const prevStatus = await page.evaluate(() => {
+        const el = document.querySelector('.qp-datagrid-page-status');
+        return el ? el.textContent.trim() : null;
+      });
+
+      // 에디터 클리어 + 새 SQL 입력
+      await editorArea.click();
+      await page.waitForTimeout(200);
+      await page.keyboard.press("Meta+a");
+      await page.waitForTimeout(100);
+      await page.keyboard.press("Backspace");
+      await page.waitForTimeout(200);
+      await page.evaluate((text) => {
+        document.execCommand('insertText', false, text);
+      }, chunkSql);
+      await page.waitForTimeout(300);
+
+      // 실행
+      await editorArea.click();
+      await page.keyboard.press("Meta+Enter");
+
+      // 결과 대기 — waitForFunction으로 이벤트 기반 감지 (고정 2초 대기 제거)
+      try {
+        await page.waitForFunction((prev) => {
+          const el = document.querySelector('.qp-datagrid-page-status');
+          if (!el) return false;
+          const text = el.textContent.trim();
+          if (text === prev) return false; // 이전 결과 그대로
+          return /\d+\s*items?\s*fetched/.test(text);
+        }, prevStatus, { timeout: 30000 });
+      } catch {
+        // 타임아웃 — 그래도 추출 시도
       }
+      await page.waitForTimeout(300); // 짧은 렌더링 대기
+
+      // React fiber에서 데이터 추출
+      const chunkData = await readVisibleData();
+      const chunkRows = extractReactRows(chunkData);
+
+      if (chunkRows.length === 0) {
+        console.log(`[Worker]    OFFSET ${offset} — 0행 → 추출 완료`);
+        break;
+      }
+
+      allRows.push(...chunkRows);
+      console.log(`[Worker]    OFFSET ${offset} — ${chunkRows.length}행 (누적 ${allRows.length}행)`);
+
+      if (chunkRows.length < batchSize) {
+        console.log(`[Worker]    마지막 배치 (${chunkRows.length} < ${batchSize}) → 추출 완료`);
+        break;
+      }
+    }
+
+    if (allRows.length > 0) {
+      console.log(`[Worker]    총 ${allRows.length}행 수집 완료`);
+      let dataHeaders = headers;
+      if (dataHeaders.length === 0) dataHeaders = allRows[0].map((_, i) => `col_${i}`);
+      const wsData = [dataHeaders, ...allRows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "추출결과");
+      const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+      console.log(`[Worker] XLSX 생성 완료: ${xlsxBuffer.length} bytes, ${allRows.length}행`);
+      return xlsxBuffer;
     }
 
     throw new Error("그리드 데이터를 추출하지 못했습니다 — debug-result-area.png 확인");

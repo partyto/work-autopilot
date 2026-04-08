@@ -91,17 +91,17 @@ WHERE tsm.state = 'a'
 FROM tn_shop_master tsm
 LEFT JOIN tn_shop_employee tse ON tse.shop_seq = tsm.shop_seq
 LEFT JOIN (
+    /* 최신 동의 여부 확인을 위해 shop_id별로 그룹화 */
     SELECT shop_id, MAX(is_agree) as is_agree
     FROM biz_terms_shop
     WHERE term_type = 'MARKETING'
     GROUP BY shop_id
 ) bts ON bts.shop_id = tsm.shop_seq
-WHERE tsm.state = 'a'
-    AND tsm.inhouse_yn = 'n'
-    AND tsm.chain_level = 'a'
-    AND tse.represent_yn = 'Y'
-    AND tsm.shop_seq IN ({shop_seq_list})
-;`,
+WHERE tsm.state = 'a'      -- 매장 상태: 가맹
+  AND tsm.inhouse_yn = 'n' -- 테스트 매장 제외
+  AND tsm.chain_level = 'a' -- 본사 계정 제외
+  AND tse.represent_yn = 'Y'
+  AND tsm.shop_seq IN ({shop_seq_list})`,
   },
   announcement_channel: "C08PN7A9R0X",
 };
