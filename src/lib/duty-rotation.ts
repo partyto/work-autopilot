@@ -72,7 +72,7 @@ WHERE tsm.state = 'a'
     AND bts.term_type = 'MARKETING'
     AND tsm.shop_seq IN ({shop_seq_list})
 ;`,
-    notice: `SELECT
+    notice: `SELECT DISTINCT
     tsm.shop_seq,
     tsm.shop_name AS '매장명',
     tse.employee_info AS '담당자(대표연락처)명',
@@ -96,10 +96,10 @@ LEFT JOIN (
     WHERE term_type = 'MARKETING'
     GROUP BY shop_id
 ) bts ON bts.shop_id = tsm.shop_seq
-WHERE 1=1
-    AND tsm.state = 'a'
+WHERE tsm.state = 'a'
     AND tsm.inhouse_yn = 'n'
     AND tsm.chain_level = 'a'
+    AND tse.represent_yn = 'Y'
     AND tsm.shop_seq IN ({shop_seq_list})
 ;`,
   },

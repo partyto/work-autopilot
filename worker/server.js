@@ -282,7 +282,24 @@ async function doExtraction(page, browser, sql) {
     }
     await page.waitForTimeout(500);
 
-    // 9. 실행 — 에디터 포커스 확보 후 Cmd+Enter
+    // 9. 네트워크 응답 인터셉트 설정 (쿼리 결과 캡처용)
+    const capturedResponses = [];
+    page.on('response', async (response) => {
+      try {
+        const url = response.url();
+        if (response.status() === 200 && url.includes('querypie')) {
+          const ct = response.headers()['content-type'] || '';
+          if (ct.includes('json') || ct.includes('text')) {
+            const body = await response.text();
+            if (body.length > 1000) {
+              capturedResponses.push({ url, size: body.length, body });
+            }
+          }
+        }
+      } catch {}
+    });
+
+    // 쿼리 실행 — 에디터 포커스 확보 후 Cmd+Enter
     console.log("[Worker] 쿼리 실행 (Cmd+Enter)...");
     await editorArea.click();
     await page.waitForTimeout(300);
@@ -338,257 +355,172 @@ async function doExtraction(page, browser, sql) {
     await page.screenshot({ path: path.join(__dirname, "debug-result-area.png") });
 
     if (fetchedCount === 0) {
-      throw new Error("쿼리 결과가 0건입니다 — SQL 또는 shop_seq 조건 확인 필요");
+      // "0 items fetched"가 표시돼도 QueryPie 그리드에 실제 데이터가 있을 수 있음
+      // DOM에서 실제 그리드 행 존재 여부 확인
+      const gridRowCount = await page.evaluate(() => {
+        const rows = document.querySelectorAll('.qp-datagrid-body-row');
+        if (rows.length > 0) return rows.length;
+        // 대안 셀렉터
+        const cells = document.querySelectorAll('.qp-datagrid-body [role="row"], .qp-datagrid-body tr');
+        return cells.length;
+      });
+      console.log(`[Worker] 0건이지만 DOM 그리드 행 ${gridRowCount}개 감지 → 데이터 추출 시도`);
+      if (gridRowCount === 0) {
+        throw new Error("쿼리 결과가 0건입니다 — SQL 또는 shop_seq 조건 확인 필요");
+      }
+      // 그리드에 데이터 있음 → 추출 진행 (fetchedCount는 표시용 0 유지)
     }
 
-    // 11. qp-datagrid에서 헤더 추출 + 그리드 클릭 → Ctrl+A → Ctrl+C로 데이터 복사
-    console.log("[Worker] 그리드 데이터 복사 시도...");
-
-    // 헤더 추출 (DOM에 있음)
+    // 11. 헤더 추출 (DOM에 있음)
+    console.log("[Worker] 그리드 데이터 추출 시도...");
     const headers = await page.evaluate(() => {
       const headerCols = document.querySelectorAll('.qp-datagrid-header-column');
       return Array.from(headerCols).map(el => el.textContent?.trim() || '').filter(t => t);
     });
     console.log(`[Worker]    헤더 ${headers.length}개: ${headers.join(', ')}`);
 
-    // 클립보드 인터셉트 설정
-    await page.evaluate(() => {
-      window.__clipboardData = null;
-      const origWriteText = navigator.clipboard.writeText;
-      navigator.clipboard.writeText = async function(text) {
-        window.__clipboardData = text;
-        return origWriteText.call(this, text);
-      };
-      // execCommand('copy') 인터셉트
-      document.addEventListener('copy', (e) => {
-        // DataTransfer에서 텍스트 읽기
-        setTimeout(() => {
-          // 마지막 복사 이벤트의 데이터
-        }, 0);
-      });
-    });
-
-    // 그리드 바디 클릭 → Cmd+A → Cmd+C
-    const gridBody = page.locator('.qp-datagrid-body').first();
-    if ((await gridBody.count()) > 0) {
-      await gridBody.click();
-      await page.waitForTimeout(300);
-      await page.keyboard.press("Meta+a");
-      await page.waitForTimeout(300);
-      await page.keyboard.press("Meta+c");
-      await page.waitForTimeout(1000);
+    // 방법 0 (최우선): 네트워크 인터셉트에서 전체 결과 추출
+    console.log(`[Worker]    캡처된 네트워크 응답 ${capturedResponses.length}개 (${capturedResponses.map(r => r.size).join(', ')} bytes)`);
+    for (const r of capturedResponses) {
+      const urlPath = new URL(r.url).pathname;
+      console.log(`[Worker]    — ${urlPath} (${r.size} bytes) : ${r.body.slice(0, 200)}`);
     }
-
-    // 클립보드 데이터 읽기
-    let clipData = await page.evaluate(() => window.__clipboardData);
-
-    // 클립보드 직접 읽기 시도 (권한 있을 수 있음)
-    if (!clipData) {
-      clipData = await page.evaluate(async () => {
-        try { return await navigator.clipboard.readText(); } catch { return null; }
-      });
-    }
-
-    if (clipData && clipData.trim()) {
-      console.log(`[Worker]    클립보드 데이터 ${clipData.length}자 캡처`);
-      // TSV (탭 구분) 파싱
-      const lines = clipData.trim().split('\n');
-      const dataHeaders = headers.length > 0 ? headers : lines[0].split('\t');
-      const startRow = headers.length > 0 ? 0 : 1;
-      const rows = lines.slice(startRow).map(line => line.split('\t'));
-      console.log(`[Worker]    파싱: ${dataHeaders.length}열, ${rows.length}행`);
-
-      const wsData = [dataHeaders, ...rows];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "추출결과");
-      const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-      console.log(`[Worker] XLSX 생성 완료: ${xlsxBuffer.length} bytes`);
-      return xlsxBuffer;
-    }
-
-    console.log("[Worker] 클립보드 캡처 실패 — 대안 시도...");
-
-    // 방법 2: copy 이벤트 직접 트리거하여 clipboardData 캡처
-    const copyData = await page.evaluate(async () => {
-      return new Promise((resolve) => {
-        let captured = null;
-
-        // copy 이벤트 리스너
-        const handler = (e) => {
-          captured = e.clipboardData?.getData('text/plain') || null;
-        };
-        document.addEventListener('copy', handler, true);
-
-        // 그리드 클릭 → 전체 선택
-        const gridBody = document.querySelector('.qp-datagrid-body');
-        if (gridBody) gridBody.click();
-
-        // 짧은 대기 후 Ctrl+A (selectionchange 트리거)
-        setTimeout(() => {
-          document.execCommand('selectAll');
-          // copy 트리거
-          setTimeout(() => {
-            document.execCommand('copy');
-            setTimeout(() => {
-              document.removeEventListener('copy', handler, true);
-              // qp-datagrid-clip-board 확인
-              const cb = document.querySelector('.qp-datagrid-clip-board');
-              const cbText = cb?.value || cb?.textContent?.trim() || cb?.innerText?.trim() || '';
-              resolve({ captured, cbText, cbTag: cb?.tagName, cbInner: cb?.innerHTML?.slice(0, 500) });
-            }, 500);
-          }, 300);
-        }, 300);
-      });
-    });
-    console.log("[Worker]    copy 이벤트 결과:", JSON.stringify(copyData).slice(0, 500));
-
-    // 방법 3: React 내부 상태에서 데이터 추출
-    const reactData = await page.evaluate(() => {
-      const grid = document.querySelector('.qp-datagrid');
-      if (!grid) return { error: 'qp-datagrid not found' };
-
-      const fiberKey = Object.keys(grid).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
-      if (!fiberKey) return { error: 'no react fiber' };
-
-      // fiber 체인에서 data + columns props 찾기
-      let fiber = grid[fiberKey];
-      for (let i = 0; i < 20 && fiber; i++) {
-        const props = fiber.memoizedProps || fiber.pendingProps;
-        if (props && props.data !== undefined && props.columns !== undefined) {
-          const data = props.data;
-          const columns = props.columns;
-          const dataType = Array.isArray(data) ? 'array' : typeof data;
-          const colType = Array.isArray(columns) ? 'array' : typeof columns;
-
-          return {
-            found: true,
-            dataType,
-            dataLength: Array.isArray(data) ? data.length : (data?.length || 'N/A'),
-            colType,
-            colLength: Array.isArray(columns) ? columns.length : 'N/A',
-            dataSample: JSON.stringify(Array.isArray(data) ? data.slice(0, 2) : data)?.slice(0, 500),
-            colSample: JSON.stringify(Array.isArray(columns) ? columns.slice(0, 5) : columns)?.slice(0, 500),
-            propsKeys: Object.keys(props),
-          };
-        }
-        // data만 있는 경우도 체크
-        if (props && props.data !== undefined && (props.dataLength !== undefined || props.loadingData !== undefined)) {
-          const data = props.data;
-          return {
-            found: true,
-            dataType: Array.isArray(data) ? 'array' : typeof data,
-            dataLength: Array.isArray(data) ? data.length : (data?.length || 'N/A'),
-            dataSample: JSON.stringify(Array.isArray(data) ? data.slice(0, 2) : data)?.slice(0, 500),
-            propsKeys: Object.keys(props),
-            level: i,
-          };
-        }
-        fiber = fiber.return;
-      }
-      return { error: 'data props not found' };
-    });
-    console.log("[Worker]    React 데이터:", JSON.stringify(reactData).slice(0, 2000));
-
-    // 방법 4: 전역 스토어 탐색 (Redux, Zustand 등)
-    const storeData = await page.evaluate(() => {
-      // Redux
-      if (window.__REDUX_STORE__ || window.store) {
-        const store = window.__REDUX_STORE__ || window.store;
-        const state = store.getState?.();
-        if (state) return { type: 'redux', keys: Object.keys(state).slice(0, 20) };
-      }
-      // window에 노출된 데이터
-      const windowKeys = Object.keys(window).filter(k =>
-        k.match(/store|state|data|result|query/i) && typeof window[k] === 'object'
-      ).slice(0, 10);
-      return { type: 'window-scan', keys: windowKeys };
-    });
-    console.log("[Worker]    전역 스토어:", JSON.stringify(storeData));
-
-    // copyData에서 결과가 있으면 사용
-    const textData = copyData?.captured || copyData?.cbText;
-    if (textData && textData.trim()) {
-      console.log(`[Worker]    데이터 캡처 성공: ${textData.length}자`);
-      const lines = textData.trim().split('\n');
-      const dataHeaders = headers.length > 0 ? headers : lines[0].split('\t');
-      const startRow = headers.length > 0 ? 0 : 1;
-      const rows = lines.slice(startRow).map(line => line.split('\t'));
-
-      const wsData = [dataHeaders, ...rows];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "추출결과");
-      const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-      console.log(`[Worker] XLSX 생성 완료: ${xlsxBuffer.length} bytes`);
-      return xlsxBuffer;
-    }
-
-    // React에서 데이터 추출 성공 시
-    if (reactData?.found) {
-      console.log("[Worker] React 상태에서 데이터 추출 시도...");
-      const fullData = await page.evaluate(() => {
-        const grid = document.querySelector('.qp-datagrid');
-        const fiberKey = Object.keys(grid).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
-        let fiber = grid[fiberKey];
-        for (let i = 0; i < 20 && fiber; i++) {
-          const props = fiber.memoizedProps || fiber.pendingProps;
-          if (props && props.data !== undefined && (props.columns !== undefined || props.dataLength !== undefined)) {
-            const data = props.data;
-            const columns = props.columns;
-            // data가 배열이면 직접 반환
-            if (Array.isArray(data)) {
-              return { data, columns: columns || null };
-            }
-            // data가 다른 형태일 수 있음 (Map, Object 등)
-            return { data: JSON.parse(JSON.stringify(data)), columns: columns ? JSON.parse(JSON.stringify(columns)) : null };
-          }
-          fiber = fiber.return;
-        }
-        return null;
-      });
-
-      if (fullData?.data) {
-        let dataRows = fullData.data;
-        let dataHeaders = headers;
-        let rows = [];
-
-        if (Array.isArray(dataRows) && dataRows.length > 0) {
-          // 배열 형태 데이터
-          if (fullData.columns && Array.isArray(fullData.columns)) {
-            dataHeaders = fullData.columns.map(c => c.name || c.key || c.title || c.field || String(c));
-          } else if (dataHeaders.length === 0) {
-            dataHeaders = Object.keys(dataRows[0]);
-          }
-          rows = dataRows.map(row => {
-            if (Array.isArray(row)) return row.map(v => String(v ?? ''));
-            return dataHeaders.map(h => String(row[h] ?? ''));
-          });
-        } else if (typeof dataRows === 'object' && !Array.isArray(dataRows)) {
-          // QueryPie 커스텀 형태: {"0": {"value": [{"v": "셀값"}, ...]}, "1": ...}
-          const keys = Object.keys(dataRows).filter(k => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
-          for (const key of keys) {
-            const row = dataRows[key];
-            if (row?.value && Array.isArray(row.value)) {
-              rows.push(row.value.map(cell => {
-                if (cell?.n) return ''; // null 플래그
-                return String(cell?.v ?? '');
-              }));
+    if (capturedResponses.length > 0) {
+      // 가장 큰 응답에서 데이터 추출 시도
+      const sorted = [...capturedResponses].sort((a, b) => b.size - a.size);
+      for (const resp of sorted) {
+        try {
+          const json = JSON.parse(resp.body);
+          // QueryPie 응답 형태 탐색 — rows, data, result 등
+          const candidates = [json.rows, json.data, json.result, json.results, json.items];
+          for (const arr of candidates) {
+            if (Array.isArray(arr) && arr.length > 0) {
+              console.log(`[Worker]    네트워크 응답에서 ${arr.length}행 발견 (${resp.url.slice(-80)})`);
+              const dataHeaders = headers.length > 0 ? headers :
+                (typeof arr[0] === 'object' ? Object.keys(arr[0]) : arr[0].map((_, i) => `col_${i}`));
+              const rows = arr.map(row => {
+                if (Array.isArray(row)) return row.map(v => String(v ?? ''));
+                if (typeof row === 'object') return dataHeaders.map(h => String(row[h] ?? ''));
+                return [String(row)];
+              });
+              const wsData = [dataHeaders, ...rows];
+              const ws = XLSX.utils.aoa_to_sheet(wsData);
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, "추출결과");
+              const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+              console.log(`[Worker] XLSX 생성 완료 (네트워크): ${xlsxBuffer.length} bytes, ${rows.length}행`);
+              return xlsxBuffer;
             }
           }
-        }
+          // 플랫 배열 (2D)이 최상위인 경우
+          if (Array.isArray(json) && json.length > 0) {
+            console.log(`[Worker]    네트워크 응답 (최상위 배열): ${json.length}행`);
+            const dataHeaders = headers.length > 0 ? headers :
+              (typeof json[0] === 'object' ? Object.keys(json[0]) : json[0].map((_, i) => `col_${i}`));
+            const rows = json.map(row => {
+              if (Array.isArray(row)) return row.map(v => String(v ?? ''));
+              if (typeof row === 'object') return dataHeaders.map(h => String(row[h] ?? ''));
+              return [String(row)];
+            });
+            const wsData = [dataHeaders, ...rows];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "추출결과");
+            const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+            console.log(`[Worker] XLSX 생성 완료 (네트워크): ${xlsxBuffer.length} bytes, ${rows.length}행`);
+            return xlsxBuffer;
+          }
+          console.log(`[Worker]    네트워크 응답 구조: ${Object.keys(json).slice(0, 15).join(', ')}`);
+        } catch {}
+      }
+      console.log("[Worker]    네트워크 응답에서 유효한 데이터를 찾지 못함");
+    }
 
-        if (rows.length > 0) {
-          if (dataHeaders.length === 0) dataHeaders = rows[0].map((_, i) => `col_${i}`);
-          const wsData = [dataHeaders, ...rows];
+    // 방법 1 (최우선): Export 버튼 클릭 → CSV 다운로드
+    console.log("[Worker] Export 버튼으로 전체 데이터 다운로드 시도...");
+    try {
+      const exportBtn = page.locator('button:has-text("Export"), [title="Export"]').first();
+      if ((await exportBtn.count()) > 0) {
+        const [download] = await Promise.all([
+          page.waitForEvent('download', { timeout: 30000 }),
+          exportBtn.click(),
+        ]);
+        const downloadPath = await download.path();
+        const suggestedName = download.suggestedFilename();
+        console.log(`[Worker]    Export 다운로드 완료: ${suggestedName} → ${downloadPath}`);
+
+        const downloadedData = fs.readFileSync(downloadPath);
+
+        // CSV인 경우 파싱 → XLSX 변환
+        if (suggestedName.endsWith('.csv') || suggestedName.endsWith('.tsv')) {
+          const csvText = downloadedData.toString('utf-8');
+          const delimiter = suggestedName.endsWith('.tsv') ? '\t' : ',';
+          const lines = csvText.trim().split('\n');
+          const csvHeaders = lines[0].split(delimiter).map(h => h.replace(/^"|"$/g, '').trim());
+          const rows = lines.slice(1).map(line => line.split(delimiter).map(c => c.replace(/^"|"$/g, '').trim()));
+          console.log(`[Worker]    CSV 파싱: ${csvHeaders.length}열, ${rows.length}행`);
+          const wsData = [csvHeaders, ...rows];
           const ws = XLSX.utils.aoa_to_sheet(wsData);
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, "추출결과");
           const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-          console.log(`[Worker] XLSX 생성 완료 (React): ${xlsxBuffer.length} bytes, ${rows.length}행`);
+          console.log(`[Worker] XLSX 생성 완료 (Export CSV): ${xlsxBuffer.length} bytes, ${rows.length}행`);
           return xlsxBuffer;
         }
-        console.log("[Worker]    데이터 변환 실패 — data 형태:", typeof dataRows, JSON.stringify(dataRows).slice(0, 300));
+
+        // XLSX/XLS인 경우 그대로 반환
+        if (suggestedName.endsWith('.xlsx') || suggestedName.endsWith('.xls')) {
+          console.log(`[Worker] XLSX 다운로드 완료 (Export): ${downloadedData.length} bytes`);
+          return downloadedData;
+        }
+
+        // 기타 형식 — 바이너리로 반환
+        console.log(`[Worker]    기타 형식 (${suggestedName}): ${downloadedData.length} bytes`);
+        return downloadedData;
+      } else {
+        console.log("[Worker]    Export 버튼 없음");
+      }
+    } catch (exportErr) {
+      console.log(`[Worker]    Export 실패: ${String(exportErr).slice(0, 200)}`);
+    }
+
+    // 방법 2 (폴백): React fiber에서 보이는 데이터 추출
+    console.log("[Worker] Export 실패 — React fiber 폴백...");
+    const reactData = await page.evaluate(() => {
+      const grid = document.querySelector('.qp-datagrid');
+      if (!grid) return null;
+      const fiberKey = Object.keys(grid).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
+      if (!fiberKey) return null;
+      let fiber = grid[fiberKey];
+      for (let i = 0; i < 20 && fiber; i++) {
+        const props = fiber.memoizedProps || fiber.pendingProps;
+        if (props?.data !== undefined && (props.columns !== undefined || props.dataLength !== undefined)) {
+          return JSON.parse(JSON.stringify(props.data));
+        }
+        fiber = fiber.return;
+      }
+      return null;
+    });
+
+    if (reactData && typeof reactData === 'object') {
+      const keys = Object.keys(reactData).filter(k => !isNaN(k)).sort((a, b) => Number(a) - Number(b));
+      const rows = [];
+      for (const key of keys) {
+        const row = reactData[key];
+        if (row?.value && Array.isArray(row.value)) {
+          rows.push(row.value.map(cell => cell?.n ? '' : String(cell?.v ?? '')));
+        }
+      }
+      if (rows.length > 0) {
+        let dataHeaders = headers;
+        if (dataHeaders.length === 0) dataHeaders = rows[0].map((_, i) => `col_${i}`);
+        const wsData = [dataHeaders, ...rows];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "추출결과");
+        const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+        console.log(`[Worker] XLSX 생성 완료 (React 폴백): ${xlsxBuffer.length} bytes, ${rows.length}행`);
+        return xlsxBuffer;
       }
     }
 
@@ -612,7 +544,10 @@ async function extractFromQueryPie(sql) {
   });
 
   try {
-    const context = await browser.newContext({ acceptDownloads: true });
+    const context = await browser.newContext({
+      acceptDownloads: true,
+      permissions: ["clipboard-read", "clipboard-write"],
+    });
     await context.addCookies(cookies);
     const page = await context.newPage();
 
