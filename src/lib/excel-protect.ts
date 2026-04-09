@@ -4,12 +4,7 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const XlsxPopulate = require("xlsx-populate");
 
-const DEFAULT_PASSWORD = "1234abcd";
-
-export async function protectExcel(
-  buffer: Buffer,
-  password: string = DEFAULT_PASSWORD,
-): Promise<Buffer> {
+export async function protectExcel(buffer: Buffer, password: string): Promise<Buffer> {
   const workbook = await XlsxPopulate.fromDataAsync(buffer);
   const result = await workbook.outputAsync({ password });
   return Buffer.from(result);

@@ -1,10 +1,15 @@
 // POST /api/extraction-jobs/complete — Worker가 추출 완료 후 xlsx 전달
 // NAS 봇이 Excel 암호화 → JIRA 첨부 → Slack 답글 처리
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { getJob, markCompleted, markFailed } from "@/lib/extraction-jobs";
 import { protectExcel } from "@/lib/excel-protect";
 import { attachFileToIssue } from "@/lib/integrations/jira";
 import { sendDM, replyToThread } from "@/lib/integrations/slack";
+
+function generatePassword(): string {
+  return crypto.randomBytes(4).toString("hex"); // 8자 hex (ex: "a3f2c1d9")
+}
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +45,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "xlsx (base64) 필요" }, { status: 400 });
     }
 
-    // 1. Excel 암호화
+    // 1. Excel 암호화 (랜덤 비밀번호)
     const xlsxBuffer = Buffer.from(xlsx, "base64");
+    const password = generatePassword();
     let protectedBuffer: Buffer;
     try {
-      protectedBuffer = await protectExcel(xlsxBuffer, "1234abcd");
+      protectedBuffer = await protectExcel(xlsxBuffer, password);
     } catch (protectErr) {
       console.error("[extraction-jobs/complete] protectExcel 실패, 원본 사용:", protectErr);
       protectedBuffer = xlsxBuffer;
@@ -68,7 +74,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. 요청자에게 비밀번호 포함 DM
-    const dmText = `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`1234abcd\``;
+    const dmText = `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`${password}\``;
     const dmSent = new Set<string>();
 
     if (job.requester_id) {
