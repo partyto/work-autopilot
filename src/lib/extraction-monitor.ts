@@ -30,11 +30,14 @@ export async function runExtractionMonitor(overrideChannel?: string) {
   const targetChannel = overrideChannel || HELP_CHANNEL;
   const isTest = !!overrideChannel;
 
-  // 채널 히스토리 조회 (테스트 채널이면 최근 10개만)
+  // 채널 히스토리 조회 — oldest 필터 없이 최근 메시지 스캔
+  // 기존 oldest 필터 방식은 부모 메시지가 이미 지나간 후
+  // 스레드 답글에 @비즈-예약PM 멘션이 달리면 탐지 못하는 문제가 있음
+  // processed_threads로 중복 처리 방지
   const messages = await getChannelHistory(
     targetChannel,
-    isTest ? undefined : (state.last_checked_ts || undefined),
-    isTest ? 10 : 100,
+    undefined,
+    isTest ? 10 : 50,
   );
 
   if (!messages.length) return;
@@ -52,14 +55,21 @@ export async function runExtractionMonitor(overrideChannel?: string) {
   for (const msg of messages) {
     const threadTs = msg.thread_ts || msg.ts;
 
+    // 이미 처리한 스레드는 바로 스킵 (불필요한 API 호출 방지)
+    if (newProcessed.includes(threadTs)) continue;
+
     // 최상위 메시지 자체에 멘션이 있으면 바로 후보 추가
     if (msg.text?.includes(BIZPM_GROUP_MENTION)) {
       candidates.push({ msg, threadTs, threadStarterId: msg.user });
       continue;
     }
 
-    // 스레드가 있는 메시지는 답글 스캔
-    if (msg.reply_count > 0 && !newProcessed.includes(threadTs)) {
+    // 스레드에 새 답글이 있는 경우만 확인 (latest_reply > last_checked_ts)
+    if (msg.reply_count > 0) {
+      const hasNewReplies = !state.last_checked_ts ||
+        (msg.latest_reply && msg.latest_reply > state.last_checked_ts);
+      if (!hasNewReplies) continue;
+
       try {
         const replies = await getThreadReplies(targetChannel, threadTs);
         for (const reply of replies) {
