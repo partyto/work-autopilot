@@ -238,203 +238,9 @@ async function doExtraction(page, browser, sql) {
     await page.waitForTimeout(1000);
     console.log("[Worker]    tablenote 선택 완료");
 
-    // 8. SQL 입력 (Monaco Editor API로 직접 설정 — keyboard.type은 자동완성이 SQL 깨뜨림)
-    console.log("[Worker] SQL 입력 중...");
+    // 8. 초기 전체 쿼리 실행 생략 — 바로 shop_seq 청킹으로 진행
+    // (이전: 전체 SQL 실행 → 네트워크 파싱 시도(항상 실패) → 청킹 fallback = ~40초 낭비)
     const editorArea = page.locator('.view-lines, .CodeMirror-lines, .cm-content').first();
-
-    const monacoSet = await page.evaluate((text) => {
-      // Monaco Editor API
-      const editors = window.monaco?.editor?.getEditors?.();
-      if (editors && editors.length > 0) {
-        editors[0].setValue(text);
-        return "monaco";
-      }
-      // CodeMirror v5
-      if (document.querySelector('.CodeMirror')) {
-        const cm = document.querySelector('.CodeMirror').CodeMirror;
-        if (cm) { cm.setValue(text); return "codemirror5"; }
-      }
-      // CodeMirror v6
-      const cmView = document.querySelector('.cm-editor')?.cmView;
-      if (cmView) {
-        cmView.view.dispatch({ changes: { from: 0, to: cmView.view.state.doc.length, insert: text } });
-        return "codemirror6";
-      }
-      return null;
-    }, sql);
-
-    if (monacoSet) {
-      console.log(`[Worker]    SQL 입력 완료 (${sql.length}자, ${monacoSet} API)`);
-      await editorArea.click();
-    } else {
-      // fallback: execCommand insertText (자동완성 트리거하지 않음)
-      console.log("[Worker]    Monaco API 없음 — insertText fallback...");
-      await editorArea.click();
-      await page.waitForTimeout(300);
-      await page.keyboard.press("Meta+a");
-      await page.waitForTimeout(200);
-      await page.keyboard.press("Backspace");
-      await page.waitForTimeout(200);
-      await page.evaluate((text) => {
-        document.execCommand('insertText', false, text);
-      }, sql);
-      console.log(`[Worker]    SQL 입력 완료 (${sql.length}자, insertText fallback)`);
-    }
-    await page.waitForTimeout(500);
-
-    // 9. 네트워크 응답 인터셉트 설정 (쿼리 결과 캡처용)
-    const capturedResponses = [];
-    page.on('response', async (response) => {
-      try {
-        const url = response.url();
-        if (response.status() === 200 && url.includes('querypie')) {
-          const ct = response.headers()['content-type'] || '';
-          if (ct.includes('json') || ct.includes('text')) {
-            const body = await response.text();
-            if (body.length > 1000) {
-              capturedResponses.push({ url, size: body.length, body });
-            }
-          }
-        }
-      } catch {}
-    });
-
-    // 쿼리 실행 — 에디터 포커스 확보 후 Cmd+Enter
-    console.log("[Worker] 쿼리 실행 (Cmd+Enter)...");
-    await editorArea.click();
-    await page.waitForTimeout(300);
-    await page.keyboard.press("Meta+Enter");
-
-    // 실행 직후 스크린샷
-    await page.waitForTimeout(3000);
-    await page.screenshot({ path: path.join(__dirname, "debug-after-run.png") });
-
-    // 10. 결과 대기 — 폴링으로 "items fetched" 감지 (최대 120초)
-    // 주의: 대용량 쿼리는 QueryPie가 "0 items fetched"를 일시적으로 표시하므로
-    //       비-0 카운트가 나올 때까지 계속 폴링, 0이 안정적으로 유지되면(10초) 실제 0건으로 판단
-    console.log("[Worker] 결과 대기...");
-    const resultStart = Date.now();
-    let resultFound = false;
-    let fetchedCount = 0;
-    let zeroSince = 0; // 0건이 처음 감지된 시각
-    while (Date.now() - resultStart < 120000) {
-      const bodyText = await page.evaluate(() => document.body.innerText);
-      const match = bodyText.match(/(\d+)\s*items?\s*fetched/);
-      if (match) {
-        const count = parseInt(match[1], 10);
-        if (count > 0) {
-          // 비-0 결과 → 확정
-          fetchedCount = count;
-          resultFound = true;
-          break;
-        } else {
-          // 0건 감지 — 대용량 쿼리 로딩 중일 수 있으므로 10초간 더 대기
-          if (zeroSince === 0) zeroSince = Date.now();
-          if (Date.now() - zeroSince >= 10000) {
-            // 10초 동안 계속 0 → 실제 0건으로 확정
-            fetchedCount = 0;
-            resultFound = true;
-            break;
-          }
-        }
-      } else {
-        // 아직 결과 없음 → zeroSince 리셋 (로딩 중에 숫자가 사라질 수 있음)
-        zeroSince = 0;
-      }
-      if (bodyText.includes("rows affected")) {
-        resultFound = true;
-        break;
-      }
-      await page.waitForTimeout(2000);
-    }
-    if (!resultFound) {
-      await page.screenshot({ path: path.join(__dirname, "debug-no-result.png") });
-      throw new Error("쿼리 결과를 120초 내에 감지하지 못했습니다 — debug-no-result.png 확인");
-    }
-    console.log(`[Worker] 결과 로드 완료: ${fetchedCount}건`);
-    await page.screenshot({ path: path.join(__dirname, "debug-result-area.png") });
-
-    if (fetchedCount === 0) {
-      // "0 items fetched"가 표시돼도 QueryPie 그리드에 실제 데이터가 있을 수 있음
-      // DOM에서 실제 그리드 행 존재 여부 확인
-      const gridRowCount = await page.evaluate(() => {
-        const rows = document.querySelectorAll('.qp-datagrid-body-row');
-        if (rows.length > 0) return rows.length;
-        // 대안 셀렉터
-        const cells = document.querySelectorAll('.qp-datagrid-body [role="row"], .qp-datagrid-body tr');
-        return cells.length;
-      });
-      console.log(`[Worker] 0건이지만 DOM 그리드 행 ${gridRowCount}개 감지 → 데이터 추출 시도`);
-      if (gridRowCount === 0) {
-        throw new Error("쿼리 결과가 0건입니다 — SQL 또는 shop_seq 조건 확인 필요");
-      }
-      // 그리드에 데이터 있음 → 추출 진행 (fetchedCount는 표시용 0 유지)
-    }
-
-    // 11. 헤더 추출 (DOM에 있음)
-    console.log("[Worker] 그리드 데이터 추출 시도...");
-    const headers = await page.evaluate(() => {
-      const headerCols = document.querySelectorAll('.qp-datagrid-header-column');
-      return Array.from(headerCols).map(el => el.textContent?.trim() || '').filter(t => t);
-    });
-    console.log(`[Worker]    헤더 ${headers.length}개: ${headers.join(', ')}`);
-
-    // 방법 0 (최우선): 네트워크 인터셉트에서 전체 결과 추출
-    console.log(`[Worker]    캡처된 네트워크 응답 ${capturedResponses.length}개 (${capturedResponses.map(r => r.size).join(', ')} bytes)`);
-    for (const r of capturedResponses) {
-      const urlPath = new URL(r.url).pathname;
-      console.log(`[Worker]    — ${urlPath} (${r.size} bytes) : ${r.body.slice(0, 200)}`);
-    }
-    if (capturedResponses.length > 0) {
-      // 가장 큰 응답에서 데이터 추출 시도
-      const sorted = [...capturedResponses].sort((a, b) => b.size - a.size);
-      for (const resp of sorted) {
-        try {
-          const json = JSON.parse(resp.body);
-          // QueryPie 응답 형태 탐색 — rows, data, result 등
-          const candidates = [json.rows, json.data, json.result, json.results, json.items];
-          for (const arr of candidates) {
-            if (Array.isArray(arr) && arr.length > 0) {
-              console.log(`[Worker]    네트워크 응답에서 ${arr.length}행 발견 (${resp.url.slice(-80)})`);
-              const dataHeaders = headers.length > 0 ? headers :
-                (typeof arr[0] === 'object' ? Object.keys(arr[0]) : arr[0].map((_, i) => `col_${i}`));
-              const rows = arr.map(row => {
-                if (Array.isArray(row)) return row.map(v => String(v ?? ''));
-                if (typeof row === 'object') return dataHeaders.map(h => String(row[h] ?? ''));
-                return [String(row)];
-              });
-              const wsData = [dataHeaders, ...rows];
-              const ws = XLSX.utils.aoa_to_sheet(wsData);
-              const wb = XLSX.utils.book_new();
-              XLSX.utils.book_append_sheet(wb, ws, "추출결과");
-              const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-              console.log(`[Worker] XLSX 생성 완료 (네트워크): ${xlsxBuffer.length} bytes, ${rows.length}행`);
-              return xlsxBuffer;
-            }
-          }
-          // 플랫 배열 (2D)이 최상위인 경우
-          if (Array.isArray(json) && json.length > 0) {
-            console.log(`[Worker]    네트워크 응답 (최상위 배열): ${json.length}행`);
-            const dataHeaders = headers.length > 0 ? headers :
-              (typeof json[0] === 'object' ? Object.keys(json[0]) : json[0].map((_, i) => `col_${i}`));
-            const rows = json.map(row => {
-              if (Array.isArray(row)) return row.map(v => String(v ?? ''));
-              if (typeof row === 'object') return dataHeaders.map(h => String(row[h] ?? ''));
-              return [String(row)];
-            });
-            const wsData = [dataHeaders, ...rows];
-            const ws = XLSX.utils.aoa_to_sheet(wsData);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "추출결과");
-            const xlsxBuffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
-            console.log(`[Worker] XLSX 생성 완료 (네트워크): ${xlsxBuffer.length} bytes, ${rows.length}행`);
-            return xlsxBuffer;
-          }
-          console.log(`[Worker]    네트워크 응답 구조: ${Object.keys(json).slice(0, 15).join(', ')}`);
-        } catch {}
-      }
-      console.log("[Worker]    네트워크 응답에서 유효한 데이터를 찾지 못함");
-    }
 
     // shop_seq 청킹으로 전체 데이터 수집
     // - IN 절을 100개씩 나눠 실행 → 결과가 ~100행으로 가상화 한계(120행) 이내 보장
@@ -482,12 +288,13 @@ async function doExtraction(page, browser, sql) {
     console.log(`[Worker]    총 shop_seq: ${allShopSeqs.length}개 → ${totalBatches}배치 (100개씩)`);
 
     const allRows = [];
+    let headers = [];
     for (let i = 0; i < allShopSeqs.length; i += seqChunkSize) {
       const chunk = allShopSeqs.slice(i, i + seqChunkSize);
       const chunkSql = sqlTemplate.replace('__CHUNK__', chunk.join(','));
       const batchNum = Math.floor(i / seqChunkSize) + 1;
 
-      // 실행 전 현재 status 캡처 (변화 감지용)
+      // 실행 전 현재 status 캡처 (이전 배치 결과와 구분용)
       const prevStatus = await page.evaluate(() => {
         const el = document.querySelector('.qp-datagrid-page-status');
         return el ? el.textContent.trim() : null;
@@ -512,11 +319,11 @@ async function doExtraction(page, browser, sql) {
       await editorArea.click();
       await page.keyboard.press("Meta+Enter");
 
-      // 결과 대기: 100개 IN 절은 빠르게 실행되므로 0.5초 초기 대기, 300ms 폴링
+      // 결과 대기: prevStatus와 비교하여 새 결과 감지
       await page.waitForTimeout(500);
       const chunkStart = Date.now();
       let chunkReady = false;
-      let lastStatusText = '';
+      let lastStatusText = prevStatus || '';
       let lastStatusChangedAt = chunkStart;
 
       while (Date.now() - chunkStart < 20000) {
@@ -531,7 +338,10 @@ async function doExtraction(page, browser, sql) {
         const match = statusText.match(/(\d+)\s*items?\s*fetched/);
         if (match) {
           const count = parseInt(match[1]);
-          if (count > 0 || Date.now() - lastStatusChangedAt > 1000) {
+          const isNewResult = statusText !== prevStatus;
+          // 새 결과(prevStatus와 다름) + count>0 → 즉시 확정
+          // 동일 status 유지 → 1.5초 안정 후 확정 (동일 행 수 반환 or 0건)
+          if ((count > 0 && isNewResult) || Date.now() - lastStatusChangedAt > 1500) {
             chunkReady = true;
             break;
           }
@@ -545,6 +355,16 @@ async function doExtraction(page, browser, sql) {
       // React fiber에서 데이터 추출
       const chunkData = await readVisibleData();
       const chunkRows = extractReactRows(chunkData);
+
+      // 첫 번째 배치에서 헤더 추출
+      if (batchNum === 1) {
+        headers = await page.evaluate(() => {
+          const headerCols = document.querySelectorAll('.qp-datagrid-header-column');
+          return Array.from(headerCols).map(el => el.textContent?.trim() || '').filter(t => t);
+        });
+        if (headers.length > 0) console.log(`[Worker]    헤더 ${headers.length}개: ${headers.join(', ')}`);
+      }
+
       allRows.push(...chunkRows);
       console.log(`[Worker]    배치 ${batchNum}/${totalBatches} — ${chunkRows.length}행 (누적 ${allRows.length}행)`);
     }
@@ -685,7 +505,7 @@ async function submitResult(jobId, xlsxBuffer, error) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
 
     const data = await res.json();
