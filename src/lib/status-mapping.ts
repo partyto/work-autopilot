@@ -14,6 +14,7 @@ export const TODO_TO_JIRA: Record<string, string> = {
 // 상태 우선순위 (높을수록 더 앞선 상태)
 export const TODO_STATUS_LEVEL: Record<string, number> = {
   pending: 0,
+  overdue: 0,   // pending과 동급 — Jira 관점에서 미시작, syncJiraStatuses 비교 대상 포함
   in_progress: 1,
   in_qa: 2,
   done: 3,

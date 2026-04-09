@@ -14,15 +14,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "ids 배열이 필요합니다" }, { status: 400 });
     }
 
-    // 각 task의 sort_order를 인덱스 순서로 업데이트
-    await Promise.all(
-      ids.map((id: string, index: number) =>
-        db
-          .update(schema.tasks)
-          .set({ sortOrder: index })
-          .where(eq(schema.tasks.id, id))
-      )
-    );
+    // 각 task의 sort_order를 트랜잭션으로 원자적 업데이트
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < ids.length; i++) {
+        await tx.update(schema.tasks).set({ sortOrder: i }).where(eq(schema.tasks.id, ids[i]));
+      }
+    });
 
     return NextResponse.json({ success: true, updated: ids.length });
   } catch (error) {

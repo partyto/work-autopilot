@@ -4,7 +4,7 @@
 export const TASK_STATUSES = ["pending", "in_progress", "in_qa", "done", "cancelled", "overdue"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-export const PRIORITIES = ["high", "medium", "low"] as const;
+export const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 export type Priority = (typeof PRIORITIES)[number];
 
 export const SOURCE_TYPES = ["manual", "jira_sync", "slack_detected"] as const;

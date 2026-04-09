@@ -30,7 +30,8 @@ type JiraCreateField = {
 };
 
 const PRIORITY_CONFIG = {
-  high:   { label: "높음",  color: "text-white",            bg: "bg-red-500",              border: "border-red-500" },
+  urgent: { label: "긴급",  color: "text-white",            bg: "bg-red-500",              border: "border-red-500" },
+  high:   { label: "높음",  color: "text-white",            bg: "bg-orange-400",           border: "border-orange-400" },
   medium: { label: "보통",  color: "text-[var(--accent)]",  bg: "bg-[var(--accent-glow)]", border: "border-[var(--accent-border)]" },
   low:    { label: "낮음",  color: "text-slate-400",        bg: "bg-slate-100",            border: "border-slate-200" },
 };
@@ -40,7 +41,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"high" | "medium" | "low">("medium");
+  const [priority, setPriority] = useState<"urgent" | "high" | "medium" | "low">("medium");
   const [dueDate, setDueDate] = useState("");
   const [slackThreadUrl, setSlackThreadUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -284,7 +285,7 @@ export default function TaskForm({ onCreated }: TaskFormProps) {
                 <Flag size={10} /> 우선순위
               </label>
               <div className="flex gap-1">
-                {(["high", "medium", "low"] as const).map((p) => {
+                {(["urgent", "high", "medium", "low"] as const).map((p) => {
                   const cfg = PRIORITY_CONFIG[p];
                   return (
                     <button

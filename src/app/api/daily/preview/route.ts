@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, and } from "drizzle-orm";
-import { toKSTDateStr, prevWorkingDay } from "@/lib/holidays";
+import { eq, and, notInArray, isNotNull, lt, or, like } from "drizzle-orm";
+import { toBusinessDateStr } from "@/lib/holidays";
+import { getCarriedOverTasks } from "@/lib/workflow";
 
 export const dynamic = "force-dynamic";
 
@@ -14,70 +15,31 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const today = new Date();
-    const todayStr = toKSTDateStr(today);
-    const tasks = await db.select().from(schema.tasks);
+    const todayStr = toBusinessDateStr(new Date()); // 05:00 이전은 전날로 취급
 
     if (type === "sod") {
-      // 어제 EOD에서 이관된 항목 조회
-      const yesterday = prevWorkingDay(today);
-      const yesterdayStr = toKSTDateStr(yesterday);
+      const [carriedOver, dueToday, overdueNow, activeStatuses] = await Promise.all([
+        getCarriedOverTasks(todayStr),
+        db.select({ id: schema.tasks.id, title: schema.tasks.title, status: schema.tasks.status, priority: schema.tasks.priority, dueDate: schema.tasks.dueDate })
+          .from(schema.tasks).where(
+            and(eq(schema.tasks.dueDate, todayStr), notInArray(schema.tasks.status, ["done", "cancelled"]))
+          ),
+        db.select({ id: schema.tasks.id, title: schema.tasks.title, priority: schema.tasks.priority, dueDate: schema.tasks.dueDate })
+          .from(schema.tasks).where(
+            and(isNotNull(schema.tasks.dueDate), lt(schema.tasks.dueDate, todayStr), notInArray(schema.tasks.status, ["done", "cancelled"]))
+          ),
+        db.select({ status: schema.tasks.status }).from(schema.tasks).where(
+          or(eq(schema.tasks.status, "in_progress"), eq(schema.tasks.status, "in_qa"), eq(schema.tasks.status, "pending"), eq(schema.tasks.status, "overdue"))
+        ),
+      ]);
 
-      const yesterdayEod = await db.query.workflowLogs.findFirst({
-        where: (w) => and(eq(w.date, yesterdayStr), eq(w.type, "eod")),
-      });
-
-      let carriedOver: typeof tasks = [];
-      if (yesterdayEod?.summary) {
-        try {
-          const eodData = JSON.parse(yesterdayEod.summary) as { carriedOverIds: string[] };
-          const taskMap = new Map(tasks.map((t) => [t.id, t]));
-          carriedOver = eodData.carriedOverIds
-            .map((id) => taskMap.get(id))
-            .filter((t): t is (typeof tasks)[number] => !!t && t.status !== "done" && t.status !== "cancelled");
-        } catch {
-          // 파싱 실패 시 현재 미완료 항목으로 fallback
-        }
-      }
-
-      // EOD 로그 없으면 현재 미완료 전체
-      if (carriedOver.length === 0) {
-        carriedOver = tasks.filter(
-          (t) => t.status === "pending" || t.status === "in_progress" || t.status === "in_qa"
-        );
-      }
-
-      const dueToday = tasks.filter(
-        (t) =>
-          t.dueDate &&
-          t.dueDate.slice(0, 10) === todayStr &&
-          t.status !== "done" &&
-          t.status !== "cancelled"
-      );
-
-      const overdueNow = tasks.filter(
-        (t) =>
-          t.dueDate &&
-          t.dueDate.slice(0, 10) < todayStr &&
-          t.status !== "done" &&
-          t.status !== "cancelled"
-      );
-
-      const inProgressCount = tasks.filter(
-        (t) => t.status === "in_progress" || t.status === "in_qa"
-      ).length;
-      const pendingCount = tasks.filter((t) => t.status === "pending").length;
+      const inProgressCount = activeStatuses.filter((t) => t.status === "in_progress" || t.status === "in_qa").length;
+      const pendingCount = activeStatuses.filter((t) => t.status === "pending").length;
 
       return NextResponse.json({
-        carriedOver: carriedOver.map((t) => ({
-          id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate,
-        })),
-        dueToday: dueToday.map((t) => ({
-          id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate,
-        })),
-        overdueNow: overdueNow.map((t) => ({
-          id: t.id, title: t.title, priority: t.priority, dueDate: t.dueDate,
-        })),
+        carriedOver: carriedOver.map((t) => ({ id: t.id, title: t.title, status: t.currentStatus, priority: t.priority })),
+        dueToday,
+        overdueNow,
         inProgressCount,
         pendingCount,
         todayStr,
@@ -85,34 +47,22 @@ export async function GET(req: NextRequest) {
     }
 
     // EOD preview
-    const completedToday = tasks.filter(
-      (t) => t.status === "done" && t.completedAt && t.completedAt.slice(0, 10) === todayStr
-    );
+    const [completedToday, incomplete, overdue] = await Promise.all([
+      db.select({ id: schema.tasks.id, title: schema.tasks.title, completedAt: schema.tasks.completedAt })
+        .from(schema.tasks).where(
+          and(eq(schema.tasks.status, "done"), like(schema.tasks.completedAt, `${todayStr}%`))
+        ),
+      db.select({ id: schema.tasks.id, title: schema.tasks.title, status: schema.tasks.status, priority: schema.tasks.priority, dueDate: schema.tasks.dueDate })
+        .from(schema.tasks).where(
+          or(eq(schema.tasks.status, "pending"), eq(schema.tasks.status, "in_progress"), eq(schema.tasks.status, "in_qa"), eq(schema.tasks.status, "overdue"))
+        ),
+      db.select({ id: schema.tasks.id, title: schema.tasks.title, priority: schema.tasks.priority, dueDate: schema.tasks.dueDate })
+        .from(schema.tasks).where(
+          and(isNotNull(schema.tasks.dueDate), lt(schema.tasks.dueDate, todayStr), notInArray(schema.tasks.status, ["done", "cancelled"]))
+        ),
+    ]);
 
-    const incomplete = tasks.filter(
-      (t) => t.status === "pending" || t.status === "in_progress" || t.status === "in_qa"
-    );
-
-    const overdue = tasks.filter(
-      (t) =>
-        t.dueDate &&
-        t.dueDate.slice(0, 10) < todayStr &&
-        t.status !== "done" &&
-        t.status !== "cancelled"
-    );
-
-    return NextResponse.json({
-      completedToday: completedToday.map((t) => ({
-        id: t.id, title: t.title, completedAt: t.completedAt,
-      })),
-      incomplete: incomplete.map((t) => ({
-        id: t.id, title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate,
-      })),
-      overdue: overdue.map((t) => ({
-        id: t.id, title: t.title, priority: t.priority, dueDate: t.dueDate,
-      })),
-      todayStr,
-    });
+    return NextResponse.json({ completedToday, incomplete, overdue, todayStr });
   } catch (err) {
     console.error("[API/daily/preview] error:", err);
     return NextResponse.json({ error: "조회 실패" }, { status: 500 });

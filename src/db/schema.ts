@@ -12,7 +12,7 @@ export const tasks = sqliteTable("tasks", {
     .notNull()
     .default("pending"),
   priority: text("priority", {
-    enum: ["high", "medium", "low"],
+    enum: ["urgent", "high", "medium", "low"],
   })
     .notNull()
     .default("medium"),

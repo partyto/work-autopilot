@@ -58,12 +58,19 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; barColor: string; badgeClass: string; flagColor: string; cardAccent: string }> = {
-  high: {
+  urgent: {
     label: "긴급",
     barColor: "bg-red-500",
     badgeClass: "bg-red-500 text-white border-red-500",
     flagColor: "text-red-500",
     cardAccent: "ring-1 ring-red-200 bg-red-50/30",
+  },
+  high: {
+    label: "높음",
+    barColor: "bg-orange-400",
+    badgeClass: "bg-orange-400 text-white border-orange-400",
+    flagColor: "text-orange-400",
+    cardAccent: "",
   },
   medium: {
     label: "보통",
@@ -81,7 +88,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; barColor: string; badgeCl
   },
 };
 
-const PRIORITIES = ["high", "medium", "low"] as const;
+const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 
 const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
   slack_detected: {
@@ -401,7 +408,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
       )}
     >
       {/* 왼쪽 우선순위 바 */}
-      <div className={cn("absolute left-0 top-0 bottom-0 overflow-hidden rounded-l-2xl", task.priority === "high" ? "w-[4px]" : "w-[3px]")}>
+      <div className={cn("absolute left-0 top-0 bottom-0 overflow-hidden rounded-l-2xl", task.priority === "urgent" ? "w-[4px]" : "w-[3px]")}>
         <div className={cn("w-full h-full cursor-pointer", pCfg.barColor)} onClick={() => setShowPriorityMenu(true)} title="우선순위 변경" />
       </div>
 
