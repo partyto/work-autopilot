@@ -294,12 +294,6 @@ async function doExtraction(page, browser, sql) {
       const chunkSql = sqlTemplate.replace('__CHUNK__', chunk.join(','));
       const batchNum = Math.floor(i / seqChunkSize) + 1;
 
-      // 실행 전 현재 status 캡처 (이전 배치 결과와 구분용)
-      const prevStatus = await page.evaluate(() => {
-        const el = document.querySelector('.qp-datagrid-page-status');
-        return el ? el.textContent.trim() : null;
-      });
-
       // 에디터 클리어 + 새 SQL 입력 (Monaco API 우선 시도)
       await editorArea.click();
       await page.waitForTimeout(200);
@@ -315,42 +309,20 @@ async function doExtraction(page, browser, sql) {
       }, chunkSql);
       await page.waitForTimeout(monacoOk ? 100 : 300);
 
-      // 실행
+      // 실행 — gRPC getDataTable 응답 대기 (status text 폴링보다 정확)
+      const dataPromise = page.waitForResponse(
+        resp => resp.url().includes('getDataTable') && resp.status() === 200,
+        { timeout: 30000 }
+      );
       await editorArea.click();
       await page.keyboard.press("Meta+Enter");
 
-      // 결과 대기: prevStatus와 비교하여 새 결과 감지
-      await page.waitForTimeout(500);
-      const chunkStart = Date.now();
-      let chunkReady = false;
-      let lastStatusText = prevStatus || '';
-      let lastStatusChangedAt = chunkStart;
-
-      while (Date.now() - chunkStart < 20000) {
-        const statusText = await page.evaluate(() => {
-          const el = document.querySelector('.qp-datagrid-page-status');
-          return el ? el.textContent.trim() : '';
-        });
-        if (statusText !== lastStatusText) {
-          lastStatusText = statusText;
-          lastStatusChangedAt = Date.now();
-        }
-        const match = statusText.match(/(\d+)\s*items?\s*fetched/);
-        if (match) {
-          const count = parseInt(match[1]);
-          const isNewResult = statusText !== prevStatus;
-          // 새 결과(prevStatus와 다름) + count>0 → 즉시 확정
-          // 동일 status 유지 → 1.5초 안정 후 확정 (동일 행 수 반환 or 0건)
-          if ((count > 0 && isNewResult) || Date.now() - lastStatusChangedAt > 1500) {
-            chunkReady = true;
-            break;
-          }
-        }
-        await page.waitForTimeout(300);
+      try {
+        await dataPromise;
+      } catch {
+        // 타임아웃 — 그래도 추출 시도
       }
-
-      if (!chunkReady) await page.waitForTimeout(2000);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(500); // 그리드 렌더링 대기
 
       // React fiber에서 데이터 추출
       const chunkData = await readVisibleData();
