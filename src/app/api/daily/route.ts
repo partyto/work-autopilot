@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 function computeWorkflowStatus(
   lastEodDate: string | null,
   lastSodDate: string | null,
+  lastEodCreatedAt: string | null,
+  lastSodCreatedAt: string | null,
 ) {
   const now = new Date();
   const todayStr = toBusinessDateStr(now); // 5시 이전은 전날로 취급
@@ -37,7 +39,7 @@ function computeWorkflowStatus(
   const nextSodTime = `${nextSodDate}T10:00:00+09:00`;
 
   // nextAction: 마지막으로 실행된 것 기준으로 다음 것을 제시
-  // EOD가 더 최신이면 → SOD가 다음, SOD가 더 최신이면 → EOD가 다음
+  // 날짜가 같으면 createdAt 타임스탬프로 비교 (같은 날 SOD→EOD 순서 판단)
   let nextAction: "eod" | "sod";
   if (!lastEodDate && !lastSodDate) {
     nextAction = "eod";
@@ -45,10 +47,13 @@ function computeWorkflowStatus(
     nextAction = "eod";
   } else if (!lastSodDate) {
     nextAction = "sod";
-  } else if (lastEodDate >= lastSodDate) {
-    nextAction = "sod";
+  } else if (lastEodDate !== lastSodDate) {
+    nextAction = lastEodDate > lastSodDate ? "sod" : "eod";
   } else {
-    nextAction = "eod";
+    // 같은 날짜: createdAt으로 최신 판단
+    const eodTs = lastEodCreatedAt ?? "";
+    const sodTs = lastSodCreatedAt ?? "";
+    nextAction = eodTs >= sodTs ? "sod" : "eod";
   }
 
   return { nextEodDate, nextEodTime, nextSodDate, nextSodTime, nextAction };
@@ -68,17 +73,24 @@ export async function GET() {
       }),
     ]);
 
+    const parseSummary = (raw: string | null) => {
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch { return null; }
+    };
+
     const status = computeWorkflowStatus(
       lastEod?.date ?? null,
       lastSod?.date ?? null,
+      lastEod?.createdAt ?? null,
+      lastSod?.createdAt ?? null,
     );
 
     return NextResponse.json({
       lastEod: lastEod
-        ? { date: lastEod.date, createdAt: lastEod.createdAt, summary: lastEod.summary ? JSON.parse(lastEod.summary) : null }
+        ? { date: lastEod.date, createdAt: lastEod.createdAt, summary: parseSummary(lastEod.summary) }
         : null,
       lastSod: lastSod
-        ? { date: lastSod.date, createdAt: lastSod.createdAt, summary: lastSod.summary ? JSON.parse(lastSod.summary) : null }
+        ? { date: lastSod.date, createdAt: lastSod.createdAt, summary: parseSummary(lastSod.summary) }
         : null,
       ...status,
     });

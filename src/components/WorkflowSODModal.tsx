@@ -22,12 +22,12 @@ interface SODPreview {
   todayStr: string;
 }
 
-const PRIORITY_LABEL: Record<string, string> = { high: "높음", medium: "보통", low: "낮음" };
+const PRIORITY_LABEL: Record<string, string> = { urgent: "긴급", high: "높음", medium: "보통", low: "낮음" };
 const STATUS_LABEL: Record<string, string> = {
   pending: "대기", in_progress: "진행 중", in_qa: "IN-QA", done: "완료", cancelled: "취소",
 };
 const PRIORITY_DOT: Record<string, string> = {
-  high: "bg-red-500", medium: "bg-amber-400", low: "bg-slate-300",
+  urgent: "bg-red-500", high: "bg-orange-400", medium: "bg-amber-400", low: "bg-slate-300",
 };
 
 interface Props {
@@ -42,7 +42,7 @@ export default function WorkflowSODModal({ onClose, onSent }: Props) {
 
   // 인라인 태스크 추가 폼
   const [newTitle, setNewTitle] = useState("");
-  const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("medium");
+  const [newPriority, setNewPriority] = useState<"urgent" | "high" | "medium" | "low">("medium");
   const [newDueDate, setNewDueDate] = useState("");
   const [addingTask, setAddingTask] = useState(false);
   const [addedTasks, setAddedTasks] = useState<{ title: string; priority: string }[]>([]);
@@ -205,14 +205,15 @@ export default function WorkflowSODModal({ onClose, onSent }: Props) {
                 />
                 <div className="flex gap-2">
                   <div className="flex gap-1 flex-1">
-                    {(["high", "medium", "low"] as const).map((p) => (
+                    {(["urgent", "high", "medium", "low"] as const).map((p) => (
                       <button
                         key={p}
                         type="button"
                         onClick={() => setNewPriority(p)}
                         className={`flex-1 py-1 text-[10px] rounded-md border transition-all cursor-pointer font-medium ${
                           newPriority === p
-                            ? p === "high" ? "bg-red-50 border-red-300 text-red-600"
+                            ? p === "urgent" ? "bg-red-50 border-red-300 text-red-600"
+                              : p === "high" ? "bg-orange-50 border-orange-300 text-orange-600"
                               : p === "medium" ? "bg-amber-50 border-amber-300 text-amber-600"
                               : "bg-slate-100 border-slate-300 text-slate-600"
                             : "border-slate-200 text-slate-400 hover:border-slate-300"

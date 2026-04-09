@@ -53,6 +53,18 @@ export async function sendDM(text: string, userId = SLACK_USER_ID) {
   return { channelId, ts: msgRes.ts };
 }
 
+// 채널 메시지 발송 (채널 이름 또는 ID)
+export async function sendChannelMessage(channel: string, text: string) {
+  const msgRes = await slackApi("chat.postMessage", {
+    channel,
+    text,
+    mrkdwn: true,
+    unfurl_links: false,
+    unfurl_media: false,
+  });
+  return { channelId: msgRes.channel, ts: msgRes.ts };
+}
+
 // 스레드에 답글 달기
 export async function replyToThread(channelId: string, threadTs: string, text: string) {
   return slackApi("chat.postMessage", {

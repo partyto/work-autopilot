@@ -1,4 +1,4 @@
-// 한국 공휴일 목록 (2025-2027)
+// 한국 공휴일 목록 (2025-2029)
 const HOLIDAYS = new Set([
   // 2025
   "2025-01-01", // 신정
@@ -35,6 +35,29 @@ const HOLIDAYS = new Set([
   "2027-10-03", // 개천절
   "2027-10-09", // 한글날
   "2027-12-25", // 성탄절
+  // 2028
+  "2028-01-01", // 신정
+  "2028-01-26", "2028-01-27", "2028-01-28", // 설날 연휴
+  "2028-03-01", // 삼일절
+  "2028-05-02", // 부처님오신날
+  "2028-05-05", // 어린이날
+  "2028-06-06", // 현충일
+  "2028-08-15", // 광복절
+  "2028-10-02", "2028-10-03", "2028-10-04", // 추석 연휴
+  "2028-10-09", // 한글날
+  "2028-12-25", // 성탄절
+  // 2029
+  "2029-01-01", // 신정
+  "2029-02-12", "2029-02-13", "2029-02-14", // 설날 연휴
+  "2029-03-01", // 삼일절
+  "2029-05-05", // 어린이날
+  "2029-05-20", // 부처님오신날
+  "2029-06-06", // 현충일
+  "2029-08-15", // 광복절
+  "2029-09-21", "2029-09-22", "2029-09-23", // 추석 연휴
+  "2029-10-03", // 개천절
+  "2029-10-09", // 한글날
+  "2029-12-25", // 성탄절
 ]);
 
 /** KST 기준 날짜를 YYYY-MM-DD 문자열로 반환 */
@@ -60,7 +83,8 @@ export function toBusinessDateStr(date: Date): string {
 
 /** 주말(토/일) 또는 공휴일이 아닌 워킹 데이 여부 */
 export function isWorkingDay(date: Date): boolean {
-  const dow = date.getDay(); // 0=일, 6=토
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const dow = kst.getUTCDay(); // KST 기준 요일 (0=일, 6=토)
   if (dow === 0 || dow === 6) return false;
   return !HOLIDAYS.has(toKSTDateStr(date));
 }
@@ -95,6 +119,7 @@ const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 /** "YYYY-MM-DD (월)" 형식 */
 export function formatWorkingDate(date: Date): string {
   const ds = toKSTDateStr(date);
-  const dow = DOW_KO[date.getDay()];
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const dow = DOW_KO[kst.getUTCDay()]; // KST 기준 요일
   return `${ds} (${dow})`;
 }

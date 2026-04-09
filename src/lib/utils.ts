@@ -5,7 +5,9 @@ export function generateId(): string {
 }
 
 export function todayDate(): string {
-  return new Date().toISOString().split("T")[0];
+  // KST 기준 날짜 반환 (toISOString은 UTC라 자정~09:00 KST 구간에서 오류)
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().split("T")[0];
 }
 
 export function nowLocal(): string {

@@ -185,12 +185,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 생성된 할일 + 매핑 반환
-    const created = await db.query.tasks.findFirst({
-      where: eq(schema.tasks.id, taskId),
-    });
-    const links = await db.query.taskLinks.findMany({
-      where: eq(schema.taskLinks.taskId, taskId),
-    });
+    const [created, links] = await Promise.all([
+      db.query.tasks.findFirst({ where: eq(schema.tasks.id, taskId) }),
+      db.query.taskLinks.findMany({ where: eq(schema.taskLinks.taskId, taskId) }),
+    ]);
+
+    if (!created) {
+      console.error("[Tasks API] 생성 직후 조회 실패:", taskId);
+      return NextResponse.json({ error: "할일 생성 후 조회 실패" }, { status: 500 });
+    }
 
     return NextResponse.json({ ...created, links }, { status: 201 });
   } catch (error) {
