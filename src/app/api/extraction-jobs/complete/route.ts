@@ -42,35 +42,51 @@ export async function POST(req: NextRequest) {
 
     // 1. Excel 암호화
     const xlsxBuffer = Buffer.from(xlsx, "base64");
-    const protectedBuffer = await protectExcel(xlsxBuffer, "1234abcd");
+    let protectedBuffer: Buffer;
+    try {
+      protectedBuffer = await protectExcel(xlsxBuffer, "1234abcd");
+    } catch (protectErr) {
+      console.error("[extraction-jobs/complete] protectExcel 실패, 원본 사용:", protectErr);
+      protectedBuffer = xlsxBuffer;
+    }
     const filename = `${job.ticket_key}_${job.extract_type}.xlsx`;
 
     // 2. JIRA 첨부
     await attachFileToIssue(job.ticket_key, filename, protectedBuffer);
 
     // 3. #help-정보보안 스레드 완료 답글
-    if (job.thread_ts && job.channel) {
-      await replyToThread(
-        job.channel,
-        job.thread_ts,
-        `:white_check_mark: *${job.ticket_key}* 데이터 추출이 완료되었습니다.`,
-      );
+    try {
+      if (job.thread_ts && job.channel) {
+        await replyToThread(
+          job.channel,
+          job.thread_ts,
+          `:white_check_mark: *${job.ticket_key}* 데이터 추출이 완료되었습니다.`,
+        );
+      }
+    } catch (replyErr) {
+      console.error("[extraction-jobs/complete] 스레드 답글 실패:", replyErr);
     }
 
     // 4. 요청자에게 비밀번호 포함 DM
+    const dmText = `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`1234abcd\``;
+    const dmSent = new Set<string>();
+
     if (job.requester_id) {
-      await sendDM(
-        `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`1234abcd\``,
-        job.requester_id,
-      );
+      try {
+        await sendDM(dmText, job.requester_id);
+        dmSent.add(job.requester_id);
+      } catch (dmErr) {
+        console.error("[extraction-jobs/complete] 요청자 DM 실패:", dmErr);
+      }
     }
 
     // 5. 스레드 원작성자가 요청자와 다른 경우 추가 DM
-    if (job.thread_starter_id && job.thread_starter_id !== job.requester_id) {
-      await sendDM(
-        `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`1234abcd\``,
-        job.thread_starter_id,
-      );
+    if (job.thread_starter_id && !dmSent.has(job.thread_starter_id)) {
+      try {
+        await sendDM(dmText, job.thread_starter_id);
+      } catch (dmErr) {
+        console.error("[extraction-jobs/complete] 원작성자 DM 실패:", dmErr);
+      }
     }
 
     markCompleted(job_id);
