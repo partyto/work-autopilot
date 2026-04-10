@@ -52,6 +52,11 @@ async function createExtractionJob(params: {
   const sql = generateSQL(extractType, shopSeq);
   const shopSeqCount = shopSeq.split(",").length;
 
+  // notify_ids: 원작성자 + 멘션한 사람들 (monitor에서 전달, 없으면 fallback)
+  const notifyIds: string[] = meta.notify_ids
+    ? (Array.isArray(meta.notify_ids) ? meta.notify_ids : JSON.parse(meta.notify_ids as string))
+    : [...new Set([meta.thread_starter_id, meta.requester_id || userId].filter(Boolean))];
+
   const job = createJob({
     ticket_key: meta.ticket_key,
     shop_seq: shopSeq,
@@ -61,6 +66,7 @@ async function createExtractionJob(params: {
     requester_id: meta.requester_id || userId,
     pm_user_id: userId,
     thread_starter_id: meta.thread_starter_id,
+    notify_ids: notifyIds,
     sql,
   });
 

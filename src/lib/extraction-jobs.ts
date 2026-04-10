@@ -16,6 +16,7 @@ export interface ExtractionJob {
   requester_id: string;
   pm_user_id: string;
   thread_starter_id?: string;
+  notify_ids?: string[]; // DM 수신 대상: 스레드 원작성자 + @비즈-예약PM 멘션한 사람들
   sql: string;
   created_at: string;
   error?: string;

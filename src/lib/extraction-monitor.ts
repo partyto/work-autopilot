@@ -74,8 +74,9 @@ export async function runExtractionMonitor(overrideChannel?: string) {
         const replies = await getThreadReplies(targetChannel, threadTs);
         for (const reply of replies) {
           if (reply.text?.includes(BIZPM_GROUP_MENTION)) {
-            // 스레드 원작성자 = 첫 번째 메시지 작성자
-            const threadStarterId = replies[0]?.user || msg.user;
+            // 스레드 원작성자 = 첫 번째 봇 제외 사람 (replies[0]은 봇 메시지일 수 있음)
+            const firstHuman = replies.find((m: any) => m.user && !m.bot_id);
+            const threadStarterId = firstHuman?.user || msg.user;
             candidates.push({ msg: reply, threadTs, threadStarterId });
             break; // 스레드당 1번만 처리
           }
@@ -94,15 +95,27 @@ export async function runExtractionMonitor(overrideChannel?: string) {
       // 스레드 전체 텍스트 합치기 (JIRA 티켓/shop_seq 파싱용)
       let fullText = msg.text || "";
       let threadStarterId = initialThreadStarter;
+      const mentionerIds: string[] = [msg.user]; // @비즈-예약PM 멘션한 사람들
       try {
         const thread = await getThreadReplies(targetChannel, threadTs);
         if (thread.length > 0) {
           fullText = thread.map((m: any) => m.text || "").join("\n");
-          threadStarterId = thread[0].user || initialThreadStarter;
+          // 원작성자 = 첫 봇 제외 사람
+          const firstHuman = thread.find((m: any) => m.user && !m.bot_id);
+          threadStarterId = firstHuman?.user || initialThreadStarter;
+          // @비즈-예약PM 멘션한 모든 사람 수집
+          for (const m of thread) {
+            if (m.user && m.text?.includes(BIZPM_GROUP_MENTION) && !mentionerIds.includes(m.user)) {
+              mentionerIds.push(m.user);
+            }
+          }
         }
       } catch {
         // 폴백: msg.text 사용
       }
+
+      // DM 수신 대상: 원작성자 + 멘션한 사람들 (중복 제거)
+      const notifyIds = [...new Set([threadStarterId, ...mentionerIds].filter(Boolean))];
 
       // JIRA 티켓 파싱
       const ticketKey = parseJiraTicket(fullText) || "SCR-?";
@@ -127,6 +140,7 @@ export async function runExtractionMonitor(overrideChannel?: string) {
         permalink,
         requester_id: msg.user,
         thread_starter_id: threadStarterId,
+        notify_ids: notifyIds,
       });
 
       await sendBlockDM(msg.user, [

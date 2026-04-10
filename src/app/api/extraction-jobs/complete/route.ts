@@ -73,25 +73,23 @@ export async function POST(req: NextRequest) {
       console.error("[extraction-jobs/complete] 스레드 답글 실패:", replyErr);
     }
 
-    // 4. 요청자에게 비밀번호 포함 DM
+    // 4. 관련자 전원에게 비밀번호 포함 DM (파트라슈봇 발송)
+    // notify_ids = 스레드 원작성자 + @비즈-예약PM 멘션한 사람들
+    // 없으면 requester_id + thread_starter_id로 fallback
     const dmText = `:page_facing_up: *${job.ticket_key}* 요청하신 데이터가 JIRA에 첨부되었습니다.\n:key: 파일 비밀번호: \`${password}\``;
     const dmSent = new Set<string>();
 
-    if (job.requester_id) {
-      try {
-        await sendDM(dmText, job.requester_id);
-        dmSent.add(job.requester_id);
-      } catch (dmErr) {
-        console.error("[extraction-jobs/complete] 요청자 DM 실패:", dmErr);
-      }
-    }
+    const notifyIds: string[] = job.notify_ids?.length
+      ? job.notify_ids
+      : [...new Set([job.requester_id, job.thread_starter_id].filter(Boolean))] as string[];
 
-    // 5. 스레드 원작성자가 요청자와 다른 경우 추가 DM
-    if (job.thread_starter_id && !dmSent.has(job.thread_starter_id)) {
+    for (const userId of notifyIds) {
+      if (!userId || dmSent.has(userId)) continue;
       try {
-        await sendDM(dmText, job.thread_starter_id);
+        await sendDM(dmText, userId);
+        dmSent.add(userId);
       } catch (dmErr) {
-        console.error("[extraction-jobs/complete] 원작성자 DM 실패:", dmErr);
+        console.error(`[extraction-jobs/complete] DM 실패 (${userId}):`, dmErr);
       }
     }
 
