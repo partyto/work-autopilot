@@ -1,8 +1,0 @@
-node_modules
-.env
-session.json
-google-session.json
-debug-*.png
-debug-*.js
-ecosystem.config.js
-setup-2fa.js

@@ -52,8 +52,17 @@ export async function POST(req: NextRequest) {
     try {
       protectedBuffer = await protectExcel(xlsxBuffer, password);
     } catch (protectErr) {
-      console.error("[extraction-jobs/complete] protectExcel 실패, 원본 사용:", protectErr);
-      protectedBuffer = xlsxBuffer;
+      console.error("[extraction-jobs/complete] protectExcel 실패:", protectErr);
+      markFailed(job_id, "Excel 암호화 실패: " + String(protectErr));
+
+      if (job.thread_ts && job.channel) {
+        await replyToThread(
+          job.channel,
+          job.thread_ts,
+          `<!subteam^S07CRFNDZD4> *${job.ticket_key}* Excel 암호화에 실패하여 첨부하지 않았습니다. 직접 처리해주세요.`,
+        );
+      }
+      return NextResponse.json({ error: "Excel 암호화 실패" }, { status: 500 });
     }
     const filename = `${job.ticket_key}_${job.extract_type}.xlsx`;
 

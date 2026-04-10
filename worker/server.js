@@ -7,12 +7,12 @@ const path = require("path");
 const unzipper = require("unzipper");
 const XLSX = require("xlsx");
 
-// .env 파일 로드 (Docker 환경변수가 없을 때 fallback)
+// .env 파일 로드
 const envPath = path.join(__dirname, ".env");
 if (fs.existsSync(envPath)) {
   fs.readFileSync(envPath, "utf-8").split("\n").forEach((line) => {
     const [key, ...vals] = line.split("=");
-    if (key && vals.length && !process.env[key.trim()]) {
+    if (key && vals.length) {
       process.env[key.trim()] = vals.join("=").trim();
     }
   });
@@ -21,9 +21,8 @@ if (fs.existsSync(envPath)) {
 const PORT = process.env.PORT || 3200;
 const NAS_URL = process.env.NAS_URL || "http://115.21.223.89:3100";
 const POLL_INTERVAL = 15000; // 15초
-const SESSION_DIR = process.env.SESSION_DIR || __dirname;
-const SESSION_PATH = path.join(SESSION_DIR, "session.json");
-const GOOGLE_SESSION_PATH = path.join(SESSION_DIR, "google-session.json");
+const SESSION_PATH = path.join(__dirname, "session.json");
+const GOOGLE_SESSION_PATH = path.join(__dirname, "google-session.json");
 const QUERYPIE_BASE = "https://querypie.infra.wadcorp.in";
 const ZIP_PASSWORD = "qwer1234!";
 const QP_EMAIL = process.env.QUERYPIE_EMAIL || "";
@@ -376,8 +375,9 @@ async function extractFromQueryPie(sql) {
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   });
 
+  let context;
   try {
-    const context = await browser.newContext({
+    context = await browser.newContext({
       acceptDownloads: true,
       permissions: ["clipboard-read", "clipboard-write"],
     });
@@ -391,6 +391,7 @@ async function extractFromQueryPie(sql) {
     if (isAuthPage(page.url())) {
       // 세션 만료 → 자동 재로그인 (1회)
       console.log("[Worker] 세션 만료 — 자동 재로그인...");
+      await context.close();
       await browser.close();
       await autoLogin();
 
@@ -405,6 +406,7 @@ async function extractFromQueryPie(sql) {
       const page2 = await ctx2.newPage();
       await page2.goto(`${QUERYPIE_BASE}/dashboard`, { waitUntil: "networkidle", timeout: 30000 });
       if (isAuthPage(page2.url())) {
+        await ctx2.close();
         await browser2.close();
         throw new Error("SESSION_EXPIRED — 재로그인 후에도 인증 실패");
       }
@@ -413,7 +415,9 @@ async function extractFromQueryPie(sql) {
 
     return await doExtraction(page, browser, sql);
   } catch (e) {
-    // doExtraction이 browser.close()를 호출하므로 여기선 중복 close 방지
+    // doExtraction 진입 전 에러 시 리소스 정리
+    try { await context?.close(); } catch {}
+    try { await browser?.close(); } catch {}
     throw e;
   }
 }
@@ -541,9 +545,9 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[QueryPie Worker] http://localhost:${PORT}`);
   console.log(`  - NAS: ${NAS_URL}`);
-  console.log(`  - 세션 디렉토리: ${SESSION_DIR}`);
+  console.log(`  - 세션 파일: ${SESSION_PATH}`);
+  console.log(`  - 세션 상태: ${isSessionConfigured() ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`  - 폴링 간격: ${POLL_INTERVAL / 1000}초`);
-  console.log(`  - 세션: ${isSessionConfigured() ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`  - POST /set-cookies — 쿠키 등록`);
   console.log("");
 

@@ -44,19 +44,3 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Extract metadata (worker)
-        id: worker-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix=
-
-      - name: Build and push (worker)
-        uses: docker/build-push-action@v6
-        with:
-          context: ./worker
-          push: true
-          tags: ${{ steps.worker-meta.outputs.tags }}
-          labels: ${{ steps.worker-meta.outputs.labels }}

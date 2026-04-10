@@ -29,7 +29,11 @@ function verifySlackSignature(
   timestamp: string | null,
   rawBody: string,
 ): boolean {
-  if (!SIGNING_SECRET || !signature || !timestamp) return !SIGNING_SECRET; // skip if no secret configured
+  if (!SIGNING_SECRET) {
+    console.warn("[slack/interact] SLACK_SIGNING_SECRET 미설정 — 서명 검증 스킵 (개발 모드)");
+    return process.env.NODE_ENV !== "production";
+  }
+  if (!signature || !timestamp) return false;
   const fiveMinAgo = Math.floor(Date.now() / 1000) - 300;
   if (parseInt(timestamp) < fiveMinAgo) return false;
   const baseString = `v0:${timestamp}:${rawBody}`;

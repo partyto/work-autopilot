@@ -33,7 +33,10 @@ function readJobs(): ExtractionJob[] {
 
 function writeJobs(jobs: ExtractionJob[]) {
   fs.mkdirSync(path.dirname(JOBS_PATH), { recursive: true });
-  fs.writeFileSync(JOBS_PATH, JSON.stringify(jobs, null, 2), "utf-8");
+  // atomic write: 임시 파일에 쓴 후 rename (동시 쓰기 시 데이터 유실 방지)
+  const tmpPath = JOBS_PATH + ".tmp";
+  fs.writeFileSync(tmpPath, JSON.stringify(jobs, null, 2), "utf-8");
+  fs.renameSync(tmpPath, JOBS_PATH);
 }
 
 export function createJob(
