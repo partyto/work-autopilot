@@ -1,4 +1,4 @@
-// QueryPie Playwright Worker — 사내망 Mac에서 실행
+// QueryPie Playwright Worker — NAS Docker 또는 로컬 Mac에서 실행
 // NAS 봇의 Job Queue를 폴링하여 QueryPie 추출 수행 후 결과 반환
 const http = require("http");
 const { chromium } = require("playwright");
@@ -7,20 +7,23 @@ const path = require("path");
 const unzipper = require("unzipper");
 const XLSX = require("xlsx");
 
-// .env 파일 로드
+// .env 파일 로드 (Docker 환경변수가 없을 때 fallback)
 const envPath = path.join(__dirname, ".env");
 if (fs.existsSync(envPath)) {
   fs.readFileSync(envPath, "utf-8").split("\n").forEach((line) => {
     const [key, ...vals] = line.split("=");
-    if (key && vals.length) process.env[key.trim()] = vals.join("=").trim();
+    if (key && vals.length && !process.env[key.trim()]) {
+      process.env[key.trim()] = vals.join("=").trim();
+    }
   });
 }
 
 const PORT = process.env.PORT || 3200;
 const NAS_URL = process.env.NAS_URL || "http://115.21.223.89:3100";
 const POLL_INTERVAL = 15000; // 15초
-const SESSION_PATH = path.join(__dirname, "session.json");
-const GOOGLE_SESSION_PATH = path.join(__dirname, "google-session.json");
+const SESSION_DIR = process.env.SESSION_DIR || __dirname;
+const SESSION_PATH = path.join(SESSION_DIR, "session.json");
+const GOOGLE_SESSION_PATH = path.join(SESSION_DIR, "google-session.json");
 const QUERYPIE_BASE = "https://querypie.infra.wadcorp.in";
 const ZIP_PASSWORD = "qwer1234!";
 const QP_EMAIL = process.env.QUERYPIE_EMAIL || "";
@@ -538,6 +541,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[QueryPie Worker] http://localhost:${PORT}`);
   console.log(`  - NAS: ${NAS_URL}`);
+  console.log(`  - 세션 디렉토리: ${SESSION_DIR}`);
   console.log(`  - 폴링 간격: ${POLL_INTERVAL / 1000}초`);
   console.log(`  - 세션: ${isSessionConfigured() ? "✅ 설정됨" : "❌ 미설정"}`);
   console.log(`  - POST /set-cookies — 쿠키 등록`);
