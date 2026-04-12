@@ -308,7 +308,7 @@ export default function Dashboard() {
   }, [kpiFilters, sourceFilters, searchQuery]);
 
   const kanbanPending = useMemo(() =>
-    applyColumnFilters(tasks.filter((t) => t.status === "pending" || t.status === "overdue")),
+    applyColumnFilters(tasks.filter((t) => t.status === "pending")),
   [tasks, applyColumnFilters]);
 
   const kanbanActive = useMemo(() =>

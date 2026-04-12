@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
             and(isNotNull(schema.tasks.dueDate), lt(schema.tasks.dueDate, todayStr), notInArray(schema.tasks.status, ["done", "cancelled"]))
           ),
         db.select({ status: schema.tasks.status }).from(schema.tasks).where(
-          or(eq(schema.tasks.status, "in_progress"), eq(schema.tasks.status, "in_qa"), eq(schema.tasks.status, "pending"), eq(schema.tasks.status, "overdue"))
+          or(eq(schema.tasks.status, "in_progress"), eq(schema.tasks.status, "in_qa"), eq(schema.tasks.status, "pending"))
         ),
       ]);
 
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
         ),
       db.select({ id: schema.tasks.id, title: schema.tasks.title, status: schema.tasks.status, priority: schema.tasks.priority, dueDate: schema.tasks.dueDate })
         .from(schema.tasks).where(
-          or(eq(schema.tasks.status, "pending"), eq(schema.tasks.status, "in_progress"), eq(schema.tasks.status, "in_qa"), eq(schema.tasks.status, "overdue"))
+          or(eq(schema.tasks.status, "pending"), eq(schema.tasks.status, "in_progress"), eq(schema.tasks.status, "in_qa"))
         ),
       db.select({ id: schema.tasks.id, title: schema.tasks.title, priority: schema.tasks.priority, dueDate: schema.tasks.dueDate })
         .from(schema.tasks).where(

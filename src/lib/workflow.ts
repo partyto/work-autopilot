@@ -57,7 +57,6 @@ export async function getCarriedOverTasks(todayStr: string): Promise<
         eq(schema.tasks.status, "pending"),
         eq(schema.tasks.status, "in_progress"),
         eq(schema.tasks.status, "in_qa"),
-        eq(schema.tasks.status, "overdue"),
       )
     );
   }
@@ -88,7 +87,6 @@ export async function getCarriedOverTasks(todayStr: string): Promise<
         eq(schema.tasks.status, "pending"),
         eq(schema.tasks.status, "in_progress"),
         eq(schema.tasks.status, "in_qa"),
-        eq(schema.tasks.status, "overdue"),
       )
     );
   }
@@ -110,7 +108,6 @@ export async function runEndOfDay(): Promise<{ message: string }> {
         eq(schema.tasks.status, "pending"),
         eq(schema.tasks.status, "in_progress"),
         eq(schema.tasks.status, "in_qa"),
-        eq(schema.tasks.status, "overdue"),
       )
     ),
     // 기한 초과
@@ -382,24 +379,6 @@ export async function runStartOfDay(): Promise<{ message: string }> {
 
   console.log(`[Workflow] SOD completed for ${todayStr}`);
   return { message };
-}
-
-// ===== 기한 초과 tasks overdue 상태로 자동 전환 =====
-export async function markOverdueTasks(): Promise<number> {
-  const todayStr = toBusinessDateStr(new Date());
-  const result = await db
-    .update(schema.tasks)
-    .set({ status: "overdue", updatedAt: nowLocal() })
-    .where(
-      and(
-        isNotNull(schema.tasks.dueDate),
-        lt(schema.tasks.dueDate, todayStr),
-        notInArray(schema.tasks.status, ["done", "cancelled", "overdue"]),
-      )
-    );
-  const count = (result as unknown as { changes: number }).changes ?? 0;
-  if (count > 0) console.log(`[Workflow] ${count}건 overdue 전환 (${todayStr})`);
-  return count;
 }
 
 // ===== SOD 완료 여부 확인 =====

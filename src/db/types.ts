@@ -1,7 +1,7 @@
 // ===== DB 열거형 타입 정의 =====
 // schema.ts의 enum과 정확히 일치해야 함
 
-export const TASK_STATUSES = ["pending", "in_progress", "in_qa", "done", "cancelled", "overdue"] as const;
+export const TASK_STATUSES = ["pending", "in_progress", "in_qa", "done", "cancelled"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const PRIORITIES = ["urgent", "high", "medium", "low"] as const;
