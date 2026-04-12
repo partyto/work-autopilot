@@ -24,7 +24,6 @@ export const STATUS_LABELS: Record<string, string> = {
   in_qa: "IN-QA",
   done: "완료",
   cancelled: "취소",
-  overdue: "기한 초과",
 };
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -33,7 +32,6 @@ export const STATUS_COLORS: Record<string, string> = {
   in_qa: "bg-violet-500",
   done: "bg-emerald-500",
   cancelled: "bg-gray-500",
-  overdue: "bg-red-500",
 };
 
 export const PRIORITY_LABELS: Record<string, string> = {

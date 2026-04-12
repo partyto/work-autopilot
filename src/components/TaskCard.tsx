@@ -55,7 +55,6 @@ const STATUS_DOT: Record<string, string> = {
   in_qa: "bg-amber-400",
   done: "bg-emerald-400",
   cancelled: "bg-slate-200",
-  overdue: "bg-red-500",
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; barColor: string; badgeClass: string; flagColor: string; cardAccent: string }> = {

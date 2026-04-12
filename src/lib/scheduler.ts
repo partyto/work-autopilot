@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { runDailyScan, executeApprovedActions } from "./engine";
-import { hasTodaySOD, sendSODNudge, markOverdueTasks } from "./workflow";
+import { hasTodaySOD, sendSODNudge } from "./workflow";
 import { isWorkingDay } from "./holidays";
 import { runExtractionMonitor } from "./extraction-monitor";
 
@@ -46,18 +46,6 @@ export function initScheduler() {
     timezone: "Asia/Seoul",
   });
 
-  // 매일 09:00 KST — 기한 초과 tasks를 overdue 상태로 자동 전환
-  cron.schedule("0 9 * * 1-5", async () => {
-    if (!isWorkingDay(new Date())) return;
-    try {
-      await markOverdueTasks();
-    } catch (error) {
-      console.error("[Scheduler] markOverdueTasks failed:", error);
-    }
-  }, {
-    timezone: "Asia/Seoul",
-  });
-
   // 15분 간격 — #help-정보보안 모니터링 (평일 업무시간 09:00~19:00)
   cron.schedule("*/15 9-19 * * 1-5", async () => {
     if (!isWorkingDay(new Date())) return;
@@ -70,5 +58,5 @@ export function initScheduler() {
     timezone: "Asia/Seoul",
   });
 
-  console.log("[Scheduler] Initialized — Auto scan: every 30min (Mon-Fri), SOD nudge: 10:00 KST, Overdue check: 09:00 KST, EOD: manual only, ExtractionMonitor: every 15min 09-19 KST");
+  console.log("[Scheduler] Initialized — Auto scan: every 30min (Mon-Fri), SOD nudge: 10:00 KST, EOD: manual only, ExtractionMonitor: every 15min 09-19 KST");
 }
