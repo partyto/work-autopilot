@@ -32,7 +32,6 @@ function fmtDue(dueDate?: string | null): string {
   return dueDate.slice(5); // "MM-DD"
 }
 
-const TEAM_CHANNEL = process.env.SLACK_TEAM_CHANNEL ?? "#team-일본서비스";
 
 // ===== 공통: 어제 EOD carryover → 현재 상태 조회 =====
 export async function getCarriedOverTasks(todayStr: string): Promise<
@@ -341,14 +340,10 @@ export async function runStartOfDay(): Promise<{ message: string }> {
 
   if (slack.isSlackConfigured()) {
     try {
-      const [dmResult] = await Promise.allSettled([
-        slack.sendDM(message),
-        slack.sendChannelMessage(TEAM_CHANNEL, message),
-      ]);
-      if (dmResult.status === "fulfilled") slackTs = dmResult.value.ts;
-      else console.error("[Workflow] SOD DM failed:", dmResult.reason);
+      const result = await slack.sendDM(message);
+      slackTs = result.ts;
     } catch (err) {
-      console.error("[Workflow] SOD Slack failed:", err);
+      console.error("[Workflow] SOD Slack DM failed:", err);
     }
   }
 
