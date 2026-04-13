@@ -8,8 +8,6 @@ import {
 } from "@/lib/integrations/slack";
 import {
   getDutyState,
-  swapDuty,
-  confirmDuty,
   getWeekRange,
   generateSQL,
 } from "@/lib/duty-rotation";
@@ -159,107 +157,7 @@ export async function POST(req: NextRequest) {
     const channelId = channel?.id;
     const messageTs = message?.ts;
 
-    // ─── 당번 확정 ───
-    if (actionId === "duty_confirm") {
-      const state = confirmDuty();
-      const duty = state.members[state.current_duty_index];
-      const week = getWeekRange();
-
-      await updateMessage(channelId, messageTs, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:rotating_light: *이번 주 데이터 추출 당번 안내*\n\n:bust_in_silhouette: 당번: <@${duty.slack_id}>\n:calendar: 기간: ${week.start}(월) ~ ${week.end}(금)\n\n:white_check_mark: *확정됨*`,
-          },
-        },
-      ], `이번 주 당번: ${duty.name} (확정)`);
-
-      await postBlockMessage(channelId, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:tada: 이번 주 당번은 <@${duty.slack_id}>님으로 확정되었습니다. 잘 부탁드립니다!`,
-          },
-        },
-      ], `이번 주 당번 확정: ${duty.name}`);
-
-      return NextResponse.json({ ok: true });
-    }
-
-    // ─── 당번 변경 요청 ───
-    if (actionId === "duty_change") {
-      const state = getDutyState();
-      const currentIndex = value.duty_index;
-
-      const otherMembers = state.members.filter((m) => m.index !== currentIndex);
-      const buttons = otherMembers.map((m) => ({
-        type: "button" as const,
-        text: { type: "plain_text" as const, text: m.name, emoji: true },
-        action_id: `duty_select_${m.index}`,
-        value: JSON.stringify({
-          original_index: currentIndex,
-          original_name: value.duty_name,
-          replacement_index: m.index,
-          replacement_name: m.name,
-          replacement_slack_id: m.slack_id,
-        }),
-      }));
-
-      await updateMessage(channelId, messageTs, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:arrows_counterclockwise: *당번 변경*\n\n현재 당번: ${value.duty_name}\n대체할 당번을 선택해주세요:`,
-          },
-        },
-        {
-          type: "actions",
-          block_id: "duty_select_actions",
-          elements: buttons,
-        },
-      ], "당번 변경 — 대체자를 선택해주세요");
-
-      return NextResponse.json({ ok: true });
-    }
-
-    // ─── 대체자 선택 ───
-    if (actionId.startsWith("duty_select_")) {
-      const replacementName = value.replacement_name;
-      const replacementSlackId = value.replacement_slack_id;
-
-      swapDuty(value.original_index, value.replacement_index);
-      const week = getWeekRange();
-
-      await updateMessage(channelId, messageTs, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:rotating_light: *이번 주 데이터 추출 당번 안내*\n\n:bust_in_silhouette: 당번: <@${replacementSlackId}>\n:calendar: 기간: ${week.start}(월) ~ ${week.end}(금)\n\n:arrows_counterclockwise: *${value.original_name} → ${replacementName}으로 변경됨*`,
-          },
-        },
-      ], `당번 변경: ${value.original_name} → ${replacementName}`);
-
-      await postBlockMessage(channelId, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:tada: 이번 주 당번은 <@${replacementSlackId}>님으로 변경 확정되었습니다. 잘 부탁드립니다!`,
-          },
-        },
-      ], `이번 주 당번 변경 확정: ${replacementName}`);
-
-      await sendDM(
-        `:wave: 이번 주 데이터 추출 당번이 되었습니다!\n기간: ${week.start}(월) ~ ${week.end}(금)\n#help-정보보안 채널에 요청이 오면 별도로 알려드리겠습니다.`,
-        replacementSlackId,
-      );
-
-      return NextResponse.json({ ok: true });
-    }
+    // ─── 당번 공지/변경/확정 로직은 제거됨 (PM 당번 역할 폐기, 2026-04-13) ───
 
     // ─── 추출 유형: 마케팅 / 공지성 → Google Sheet → Job Queue ───
     if (actionId === "extract_marketing" || actionId === "extract_notice") {
