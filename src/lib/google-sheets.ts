@@ -188,22 +188,10 @@ export async function extractShopSeqFromJira(ticketKey: string): Promise<SheetEx
       return { type: "success", shopSeq, tabName: tabs[0].title };
     }
 
-    // 탭이 여러 개인 경우
+    // 탭이 여러 개인 경우 — 항상 모든 탭을 스캔하여 선택지 제공
     console.log(`[google-sheets] ${ticketKey}: ${tabs.length}개 탭 발견 — ${tabs.map((t) => t.title).join(", ")}`);
 
-    // URL에 명시적 gid가 있으면 해당 탭 먼저 시도
-    if (sheetInfo.hasExplicitGid) {
-      const targetTab = tabs.find((t) => String(t.sheetId) === sheetInfo.gid);
-      if (targetTab) {
-        const shopSeq = await fetchShopSeqByTabName(sheetInfo.spreadsheetId, targetTab.title);
-        if (shopSeq) {
-          console.log(`[google-sheets] ${ticketKey}: URL gid 탭에서 shop_seq ${shopSeq.split(",").length}개 추출 (탭: ${targetTab.title})`);
-          return { type: "success", shopSeq, tabName: targetTab.title };
-        }
-      }
-    }
-
-    // 모든 탭에서 shop_seq 검색
+    // 모든 탭에서 shop_seq 존재 여부 스캔
     const tabsWithShopSeq: SheetTab[] = [];
     for (const tab of tabs) {
       const shopSeq = await fetchShopSeqByTabName(sheetInfo.spreadsheetId, tab.title);
@@ -217,13 +205,15 @@ export async function extractShopSeqFromJira(ticketKey: string): Promise<SheetEx
       return null;
     }
 
+    // shop_seq가 있는 탭이 1개뿐이면 바로 추출
     if (tabsWithShopSeq.length === 1) {
       const shopSeq = await fetchShopSeqByTabName(sheetInfo.spreadsheetId, tabsWithShopSeq[0].title);
       console.log(`[google-sheets] ${ticketKey}: shop_seq ${shopSeq.split(",").length}개 추출 (탭: ${tabsWithShopSeq[0].title})`);
       return { type: "success", shopSeq, tabName: tabsWithShopSeq[0].title };
     }
 
-    // 여러 탭에 shop_seq가 있음 → 사용자 선택 필요
+    // shop_seq가 있는 탭이 여러 개 → 사용자 선택 필요
+    // URL gid가 명시되어 있어도 다른 탭에도 데이터가 있으면 선택지 제공
     console.log(`[google-sheets] ${ticketKey}: ${tabsWithShopSeq.length}개 탭에 shop_seq 존재 — 사용자 선택 필요`);
     return {
       type: "select_tab",

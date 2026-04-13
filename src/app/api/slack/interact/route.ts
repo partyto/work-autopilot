@@ -306,19 +306,25 @@ export async function POST(req: NextRequest) {
               }),
             }));
 
+            // Slack actions 블록당 elements 5개씩 분할 (가독성 + 25개 제한 안전)
+            const actionBlocks: any[] = [];
+            for (let i = 0; i < tabButtons.length; i += 5) {
+              actionBlocks.push({
+                type: "actions",
+                block_id: `tab_select_actions_${i}`,
+                elements: tabButtons.slice(i, i + 5),
+              });
+            }
+
             await updateMessage(channelId, messageTs, [
               {
                 type: "section",
                 text: {
                   type: "mrkdwn",
-                  text: `:clipboard: *${meta.ticket_key}* — *${extractLabel}* 선택됨\n\n:page_facing_up: 시트에 여러 탭이 있습니다. 추출할 탭을 선택해주세요:`,
+                  text: `:clipboard: *${meta.ticket_key}* — *${extractLabel}* 선택됨\n\n:page_facing_up: 시트에 ${result.tabs.length}개 탭이 있습니다. 추출할 탭을 선택해주세요:`,
                 },
               },
-              {
-                type: "actions",
-                block_id: "tab_select_actions",
-                elements: tabButtons,
-              },
+              ...actionBlocks,
             ], `${meta.ticket_key} — 탭 선택`);
 
             return NextResponse.json({ ok: true });
