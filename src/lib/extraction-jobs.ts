@@ -9,7 +9,8 @@ export interface ExtractionJob {
   id: string;
   status: "pending" | "processing" | "completed" | "failed";
   ticket_key: string;
-  shop_seq: string;
+  shop_seq: string; // 빈 문자열이면 all_shops 모드
+  all_shops?: boolean; // true면 query_all_shops 사용 (shop_seq IN 조건 제거)
   extract_type: "marketing" | "notice";
   thread_ts: string;
   channel: string;
@@ -20,6 +21,7 @@ export interface ExtractionJob {
   sql: string;
   created_at: string;
   error?: string;
+  notified_stale?: boolean; // 헬스체크에서 지연 알림 이미 발송됨
 }
 
 function readJobs(): ExtractionJob[] {

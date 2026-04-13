@@ -3,6 +3,7 @@ import { runDailyScan, executeApprovedActions } from "./engine";
 import { hasTodaySOD, sendSODNudge } from "./workflow";
 import { isWorkingDay } from "./holidays";
 import { runExtractionMonitor } from "./extraction-monitor";
+import { runExtractionHealthCheck } from "./extraction-health";
 
 let initialized = false;
 
@@ -58,5 +59,18 @@ export function initScheduler() {
     timezone: "Asia/Seoul",
   });
 
-  console.log("[Scheduler] Initialized — Auto scan: every 30min (Mon-Fri), SOD nudge: 10:00 KST, EOD: manual only, ExtractionMonitor: every 15min 09-19 KST");
+  // 10분 간격 — 추출 Job 헬스체크 (평일 업무시간 09-19 KST)
+  // pending 30분 / processing 60분 초과 시 승인자에게 DM 알림 (중복 알림은 notified_stale 플래그로 차단)
+  cron.schedule("*/10 9-19 * * 1-5", async () => {
+    if (!isWorkingDay(new Date())) return;
+    try {
+      await runExtractionHealthCheck();
+    } catch (error) {
+      console.error("[Scheduler] ExtractionHealthCheck failed:", error);
+    }
+  }, {
+    timezone: "Asia/Seoul",
+  });
+
+  console.log("[Scheduler] Initialized — Auto scan: every 30min (Mon-Fri), SOD nudge: 10:00 KST, EOD: manual only, ExtractionMonitor: every 15min 09-19 KST, ExtractionHealth: every 10min 09-19 KST");
 }

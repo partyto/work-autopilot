@@ -47,14 +47,17 @@ async function createExtractionJob(params: {
   extractLabel: string;
   shopSeq: string;
   shopSeqSource: string;
-  meta: Record<string, string>;
+  allShops?: boolean;
+  meta: Record<string, any>;
   userId: string;
   channelId: string;
   messageTs: string;
 }) {
-  const { extractType, extractLabel, shopSeq, shopSeqSource, meta, userId, channelId, messageTs } = params;
-  const sql = generateSQL(extractType, shopSeq);
-  const shopSeqCount = shopSeq.split(",").length;
+  const { extractType, extractLabel, shopSeq, shopSeqSource, allShops, meta, userId, channelId, messageTs } = params;
+  const sql = generateSQL(extractType, shopSeq, { allShops });
+  const scopeText = allShops
+    ? "*전체 매장* (조건 IN 제거)"
+    : `${shopSeq.split(",").filter(Boolean).length}개 매장`;
 
   // notify_ids: 원작성자 + 멘션한 사람들 (monitor에서 전달, 없으면 fallback)
   const notifyIds: string[] = meta.notify_ids
@@ -64,6 +67,7 @@ async function createExtractionJob(params: {
   const job = createJob({
     ticket_key: meta.ticket_key,
     shop_seq: shopSeq,
+    all_shops: !!allShops,
     extract_type: extractType,
     thread_ts: meta.thread_ts || "",
     channel: meta.channel || "",
@@ -80,15 +84,55 @@ async function createExtractionJob(params: {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `:clipboard: *${meta.ticket_key} 추출 요청*\n\n:hourglass_flowing_sand: *${extractLabel}* 선택됨 — Worker 대기 중...\nshop_seq: ${shopSeqCount}개 (${shopSeqSource})\njob: \`${job.id.slice(0, 8)}\``,
+        text: `:clipboard: *${meta.ticket_key} 추출 요청*\n\n:hourglass_flowing_sand: *${extractLabel}* 선택됨 — Worker 대기 중...\n대상: ${scopeText} (${shopSeqSource})\njob: \`${job.id.slice(0, 8)}\``,
       },
     },
   ], `${meta.ticket_key} — ${extractLabel} Worker 대기 중`);
 
   await sendDM(
-    `⏳ *${meta.ticket_key}* 추출 요청이 등록되었습니다.\nshop_seq: ${shopSeqCount}개 (${shopSeqSource}에서 추출)\nWorker가 처리할 예정입니다.`,
+    `⏳ *${meta.ticket_key}* 추출 요청이 등록되었습니다.\n대상: ${scopeText} (${shopSeqSource})\nWorker가 처리할 예정입니다.`,
     userId,
   );
+}
+
+// shop_seq 파싱 실패 시 승인자에게 선택 버튼 DM
+async function promptAllShopsFallback(
+  channelId: string,
+  messageTs: string,
+  meta: Record<string, any>,
+  extractType: "marketing" | "notice",
+  extractLabel: string,
+) {
+  const value = JSON.stringify({ ...meta, extract_type: extractType });
+  await updateMessage(channelId, messageTs, [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `:warning: *${meta.ticket_key} — ${extractLabel}* 처리 중 shop_seq를 찾지 못했습니다.\n\n:mag: JIRA 본문/첨부 시트, Slack 스레드 모두에서 매장 목록을 추출하지 못했습니다.\n어떻게 진행할까요?`,
+      },
+    },
+    {
+      type: "actions",
+      block_id: "extract_fallback_actions",
+      elements: [
+        {
+          type: "button" as const,
+          text: { type: "plain_text" as const, text: ":white_check_mark: 전체 매장 대상 진행", emoji: true },
+          style: "primary" as const,
+          action_id: "extract_all_shops_confirm",
+          value,
+        },
+        {
+          type: "button" as const,
+          text: { type: "plain_text" as const, text: ":x: 취소", emoji: true },
+          style: "danger" as const,
+          action_id: "extract_cancel",
+          value,
+        },
+      ],
+    },
+  ], `${meta.ticket_key} — shop_seq 미확인 → 진행 방식 선택`);
 }
 
 // POST /api/slack/interact — Slack 버튼 클릭 콜백 핸들러
@@ -223,6 +267,22 @@ export async function POST(req: NextRequest) {
       const extractLabel = actionId === "extract_marketing" ? "마케팅 수신용" : "공지성 수신용";
       const meta = value;
 
+      // monitor에서 "전체 매장" 의도 감지한 경우 → 즉시 all_shops 모드로 Job 생성
+      if (meta.all_shops) {
+        await createExtractionJob({
+          extractType,
+          extractLabel,
+          shopSeq: "",
+          shopSeqSource: "slack 본문 — '전체 매장' 감지",
+          allShops: true,
+          meta,
+          userId: user.id,
+          channelId,
+          messageTs,
+        });
+        return NextResponse.json({ ok: true });
+      }
+
       // shop_seq 결정: JIRA 구글시트 → Slack 메시지 파싱 순서
       let shopSeq = "";
       let shopSeqSource = "slack";
@@ -277,11 +337,9 @@ export async function POST(req: NextRequest) {
       if (!shopSeq) shopSeq = meta.shop_seq || "";
       if (!shopSeq) shopSeqSource = "slack";
 
+      // shop_seq 미확인 → 승인자에게 "전체 매장 추출"/"취소" 버튼 DM
       if (!shopSeq) {
-        await sendDM(
-          `⚠️ *${meta.ticket_key}* shop_seq를 찾을 수 없습니다.\nJIRA 이슈에 Google Sheets 링크가 있는지, 시트에 shop_seq 컬럼이 있는지 확인해주세요.`,
-          user.id,
-        );
+        await promptAllShopsFallback(channelId, messageTs, meta, extractType, extractLabel);
         return NextResponse.json({ ok: true });
       }
 
@@ -331,6 +389,40 @@ export async function POST(req: NextRequest) {
         await sendDM(`❌ *${meta.ticket_key}* 추출 중 오류: ${String(err).slice(0, 200)}`, user.id);
       }
 
+      return NextResponse.json({ ok: true });
+    }
+
+    // ─── shop_seq 파싱 실패 → 전체 매장 대상 확정 ───
+    if (actionId === "extract_all_shops_confirm") {
+      const meta = value;
+      const extractType = (meta.extract_type as "marketing" | "notice") || "marketing";
+      const extractLabel = extractType === "marketing" ? "마케팅 수신용" : "공지성 수신용";
+      await createExtractionJob({
+        extractType,
+        extractLabel,
+        shopSeq: "",
+        shopSeqSource: "승인자 수동 확정 (전체 매장)",
+        allShops: true,
+        meta,
+        userId: user.id,
+        channelId,
+        messageTs,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ─── shop_seq 파싱 실패 → 취소 ───
+    if (actionId === "extract_cancel") {
+      const meta = value;
+      await updateMessage(channelId, messageTs, [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `:octagonal_sign: *${meta.ticket_key}* 추출 요청이 취소되었습니다.\n필요 시 JIRA 본문에 매장 목록 또는 Google Sheet 링크를 추가하고 다시 요청해주세요.`,
+          },
+        },
+      ], `${meta.ticket_key} — 취소됨`);
       return NextResponse.json({ ok: true });
     }
 

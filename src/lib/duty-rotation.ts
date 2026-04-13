@@ -178,8 +178,25 @@ export function getWeekRange(): { start: string; end: string } {
   return { start: fmt(monday), end: fmt(friday) };
 }
 
-export function generateSQL(type: "marketing" | "notice", shopSeqList: string): string {
+export function generateSQL(
+  type: "marketing" | "notice",
+  shopSeqList: string,
+  opts?: { allShops?: boolean },
+): string {
   const state = getDutyState();
   const template = state.sql_templates[type];
+
+  if (opts?.allShops) {
+    // shop_seq IN (...) 조건 라인 제거 — 전체 매장 대상
+    return template
+      .split("\n")
+      .filter((line) => !/tsm\.shop_seq\s+IN\s*\(\{shop_seq_list\}\)/i.test(line))
+      // 이전 라인 끝의 AND가 남지 않도록 처리: 직전 라인의 끝 AND 제거는 SQL 파서 관점에서 필요하나
+      // WHERE 절 마지막 조건이라 AND로 끝나면 문법오류 → 별도 처리
+      .join("\n")
+      .replace(/\s+AND\s*\n\s*;/g, "\n;")
+      .replace(/\s+AND\s*$/gm, "");
+  }
+
   return template.replace("{shop_seq_list}", shopSeqList);
 }

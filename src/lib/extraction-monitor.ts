@@ -16,13 +16,51 @@ function parseJiraTicket(text: string): string | null {
   return match ? match[0].toUpperCase() : null;
 }
 
-function parseShopSeq(text: string): string {
-  // shop_seq 패턴: 숫자 (콤마 구분 가능)
-  const match = text.match(/shop_seq[^\d]*([0-9,\s]+)/i);
-  if (match) return match[1].replace(/\s/g, "").trim();
-  // 그냥 숫자 목록
-  const nums = text.match(/\b\d{4,6}\b/g);
-  return nums ? nums.join(",") : "";
+// "전체 매장" / "모든 매장" / "all shops" 의도 감지
+// → shop_seq 파싱 건너뛰고 query_all_shops로 즉시 처리
+export function detectAllShopsIntent(text: string): boolean {
+  if (!text) return false;
+  // JIRA/Slack 멘션/링크 등을 제거한 clean 텍스트로 체크
+  const clean = text.replace(/<[^>]+>/g, " ").replace(/https?:\/\/\S+/g, " ");
+  return /(전체\s*매장|모든\s*매장|전\s*매장|all\s*shops?)/i.test(clean);
+}
+
+// 본문에서 shop_seq 추출 (config/sql_templates.json의 extraction_policy와 동일 로직)
+export function parseShopSeq(text: string): string {
+  if (!text) return "";
+  const found = new Set<string>();
+  const pushNums = (s: string) => {
+    s.split(/[,\s]+/).forEach((t) => {
+      const n = t.replace(/[^0-9]/g, "");
+      if (n.length >= 4 && n.length <= 8) found.add(n);
+    });
+  };
+
+  // 1) 명시적 키워드 + 숫자
+  const keywordRe = /(?:shop[_ ]?seq|매장[ ]?번호|매장[ ]?ID|shopSeq)\s*[:=\-]?\s*([0-9,\s]+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = keywordRe.exec(text)) !== null) pushNums(m[1]);
+
+  // 2) URL 내 shop_seq 파라미터
+  const urlRe = /(?:shop_seq|shopSeq)=([0-9]+)/gi;
+  while ((m = urlRe.exec(text)) !== null) found.add(m[1]);
+
+  // 3) /shop/12345, /shops/12345 경로
+  const pathRe = /\/shops?\/([0-9]+)/gi;
+  while ((m = pathRe.exec(text)) !== null) {
+    if (m[1].length >= 4 && m[1].length <= 8) found.add(m[1]);
+  }
+
+  if (found.size > 0) return Array.from(found).join(",");
+
+  // 4) fallback: "대상 매장", "매장 리스트" 등 명시 문구가 있을 때만 단독 숫자 채택
+  const explicitHint = /(대상\s*매장|매장\s*리스트|매장\s*목록|대상\s*shop)/i.test(text);
+  if (explicitHint) {
+    const nums = text.match(/(?<![0-9])[0-9]{4,8}(?![0-9])/g);
+    if (nums) nums.forEach((n) => found.add(n));
+  }
+
+  return Array.from(found).join(",");
 }
 
 export async function runExtractionMonitor(overrideChannel?: string) {
@@ -119,22 +157,29 @@ export async function runExtractionMonitor(overrideChannel?: string) {
 
       // JIRA 티켓 파싱
       const ticketKey = parseJiraTicket(fullText) || "SCR-?";
-      const shopSeq = parseShopSeq(fullText);
+      const allShops = detectAllShopsIntent(fullText);
+      const shopSeq = allShops ? "" : parseShopSeq(fullText);
 
       const permalink = await getPermalink(targetChannel, threadTs);
 
       // 1) 스레드에 확인 답글
+      const ackSuffix = allShops
+        ? " (본문에 *전체 매장* 언급 확인 → 전체 매장 대상으로 진행)"
+        : shopSeq
+          ? ` (shop_seq ${shopSeq.split(",").length}개 추출)`
+          : "";
       await slackApi("chat.postMessage", {
         channel: targetChannel,
         thread_ts: threadTs,
-        text: `:dog: 확인했습니다! <@${msg.user}>님에게 DM으로 추출 유형 선택을 안내드리겠습니다.`,
+        text: `:dog: 확인했습니다! <@${msg.user}>님에게 DM으로 추출 유형 선택을 안내드리겠습니다.${ackSuffix}`,
         mrkdwn: true,
       });
 
-      // 2) 요청자에게 추출 유형 선택 버튼 DM
+      // 2) 요청자(승인자)에게 추출 유형 선택 버튼 DM
       const metadata = JSON.stringify({
         ticket_key: ticketKey,
         shop_seq: shopSeq,
+        all_shops: allShops,
         thread_ts: threadTs,
         channel: targetChannel,
         permalink,
@@ -143,12 +188,16 @@ export async function runExtractionMonitor(overrideChannel?: string) {
         notify_ids: notifyIds,
       });
 
+      const shopSeqLine = allShops
+        ? ":department_store: 대상: *전체 매장* (본문 언급 감지)"
+        : `:department_store: shop_seq: \`${shopSeq || "자동 추출 예정 (JIRA 시트/파싱)"}\``;
+
       await sendBlockDM(msg.user, [
         {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `:bell: *새 데이터 추출 요청*\n\n:ticket: JIRA: <https://catchtable.atlassian.net/browse/${ticketKey}|${ticketKey}>\n:department_store: shop_seq: \`${shopSeq || "자동 추출 예정"}\`\n:link: <${permalink}|Slack 스레드 보기>`,
+            text: `:bell: *새 데이터 추출 요청*\n\n:ticket: JIRA: <https://catchtable.atlassian.net/browse/${ticketKey}|${ticketKey}>\n${shopSeqLine}\n:link: <${permalink}|Slack 스레드 보기>`,
           },
         },
         {
