@@ -30,3 +30,4 @@ worker/google-session.json
 worker/.env
 worker/debug-*
 data/
+tsconfig.tsbuildinfo

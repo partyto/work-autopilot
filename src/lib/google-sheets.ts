@@ -118,37 +118,49 @@ async function fetchShopSeqByTabName(spreadsheetId: string, sheetName: string): 
   const values: string[][] = data.values;
   if (!values || values.length < 2) return "";
 
-  // 헤더에서 shop_seq 컬럼 찾기
-  const headerRow = values[0].map((h: string) => h?.toString().toLowerCase().trim());
-  let colIdx = headerRow.findIndex(
-    (h: string) =>
-      h.includes("shop_seq") ||
-      h.includes("매장시퀀스") ||
-      h.includes("매장번호") ||
-      h === "shop_seq",
-  );
+  // 1) 모든 행을 스캔하여 shop_seq 키워드가 있는 행을 헤더로 탐지
+  //    비표준 시트(1행이 제목/메타데이터, 중간 행에 실제 헤더)에도 대응
+  const isHeaderMatch = (cell: string) =>
+    cell.includes("shop_seq") ||
+    cell.includes("매장시퀀스") ||
+    cell.includes("매장번호") ||
+    cell.includes("샵시퀀스") ||
+    cell.includes("매장 시퀀스") ||
+    cell.includes("매장 번호");
 
+  let headerRowIdx = -1;
+  let colIdx = -1;
+  for (let r = 0; r < values.length; r++) {
+    const row = values[r] || [];
+    const normalized = row.map((h) => h?.toString().toLowerCase().trim() || "");
+    const found = normalized.findIndex((h) => h && isHeaderMatch(h));
+    if (found !== -1) {
+      headerRowIdx = r;
+      colIdx = found;
+      break;
+    }
+  }
+
+  // 2) 헤더 키워드를 못 찾은 경우 — fallback: 전체 컬럼에서 숫자만 있는 컬럼 탐색
   if (colIdx === -1) {
-    // 헤더에 없으면 — 첫 번째 컬럼이 숫자들인지 확인
-    const firstCol = values.slice(1).map((row) => row[0]?.toString().trim()).filter(Boolean);
-    if (firstCol.length > 0 && firstCol.every((v) => /^\d+$/.test(v))) {
-      colIdx = 0;
-    } else {
-      // 모든 컬럼에서 3-7자리 숫자만 있는 컬럼 찾기
-      for (let c = 0; c < values[0].length; c++) {
-        const colValues = values.slice(1).map((row) => row[c]?.toString().trim()).filter(Boolean);
-        if (colValues.length > 0 && colValues.every((v) => /^\d{3,7}$/.test(v))) {
-          colIdx = c;
-          break;
-        }
+    for (let c = 0; c < (values[0]?.length || 0); c++) {
+      const colValues = values
+        .slice(1)
+        .map((row) => row[c]?.toString().trim())
+        .filter(Boolean);
+      if (colValues.length > 0 && colValues.every((v) => /^\d{3,7}$/.test(v))) {
+        headerRowIdx = 0;
+        colIdx = c;
+        break;
       }
     }
   }
 
   if (colIdx === -1) return "";
 
+  // 헤더 다음 행부터 shop_seq 값 수집
   const shopSeqValues = values
-    .slice(1)
+    .slice(headerRowIdx + 1)
     .map((row) => row[colIdx]?.toString().trim())
     .filter((v) => v && /^\d+$/.test(v));
 
