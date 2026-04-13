@@ -9,7 +9,8 @@ import {
 import { slackApi } from "./integrations/slack";
 
 export const HELP_CHANNEL = "C07DAP4TL5T"; // #help-정보보안
-export const BIZPM_GROUP_MENTION = "<!subteam^S07CRFNDZD4>"; // @비즈-예약PM
+export const BOT_USER_ID = "U0AMXD1CKS8"; // @파트라슈 봇
+export const BOT_MENTION = `<@${BOT_USER_ID}>`;
 
 function parseJiraTicket(text: string): string | null {
   const match = text.match(/SCR-\d+/i);
@@ -97,7 +98,7 @@ export async function runExtractionMonitor(overrideChannel?: string) {
     if (newProcessed.includes(threadTs)) continue;
 
     // 최상위 메시지 자체에 멘션이 있으면 바로 후보 추가
-    if (msg.text?.includes(BIZPM_GROUP_MENTION)) {
+    if (msg.text?.includes(BOT_MENTION)) {
       candidates.push({ msg, threadTs, threadStarterId: msg.user });
       continue;
     }
@@ -111,7 +112,7 @@ export async function runExtractionMonitor(overrideChannel?: string) {
       try {
         const replies = await getThreadReplies(targetChannel, threadTs);
         for (const reply of replies) {
-          if (reply.text?.includes(BIZPM_GROUP_MENTION)) {
+          if (reply.text?.includes(BOT_MENTION)) {
             // 스레드 원작성자 = 첫 번째 봇 제외 사람 (replies[0]은 봇 메시지일 수 있음)
             const firstHuman = replies.find((m: any) => m.user && !m.bot_id);
             const threadStarterId = firstHuman?.user || msg.user;
@@ -143,7 +144,7 @@ export async function runExtractionMonitor(overrideChannel?: string) {
           threadStarterId = firstHuman?.user || initialThreadStarter;
           // @비즈-예약PM 멘션한 모든 사람 수집
           for (const m of thread) {
-            if (m.user && m.text?.includes(BIZPM_GROUP_MENTION) && !mentionerIds.includes(m.user)) {
+            if (m.user && m.text?.includes(BOT_MENTION) && !mentionerIds.includes(m.user)) {
               mentionerIds.push(m.user);
             }
           }
