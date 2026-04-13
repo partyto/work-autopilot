@@ -8,8 +8,8 @@ import {
 } from "./integrations/slack";
 import { slackApi } from "./integrations/slack";
 
-const HELP_CHANNEL = "C07DAP4TL5T"; // #help-정보보안
-const BIZPM_GROUP_MENTION = "<!subteam^S07CRFNDZD4>"; // @비즈-예약PM
+export const HELP_CHANNEL = "C07DAP4TL5T"; // #help-정보보안
+export const BIZPM_GROUP_MENTION = "<!subteam^S07CRFNDZD4>"; // @비즈-예약PM
 
 function parseJiraTicket(text: string): string | null {
   const match = text.match(/SCR-\d+/i);
