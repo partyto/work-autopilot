@@ -129,115 +129,144 @@ export async function runExtractionMonitor(overrideChannel?: string) {
   for (const { msg, threadTs, threadStarterId: initialThreadStarter } of candidates) {
     // 이미 처리한 스레드 스킵
     if (newProcessed.includes(threadTs)) continue;
-
-    try {
-      // 스레드 전체 텍스트 합치기 (JIRA 티켓/shop_seq 파싱용)
-      let fullText = msg.text || "";
-      let threadStarterId = initialThreadStarter;
-      const mentionerIds: string[] = [msg.user]; // @비즈-예약PM 멘션한 사람들
-      try {
-        const thread = await getThreadReplies(targetChannel, threadTs);
-        if (thread.length > 0) {
-          fullText = thread.map((m: any) => m.text || "").join("\n");
-          // 원작성자 = 첫 봇 제외 사람
-          const firstHuman = thread.find((m: any) => m.user && !m.bot_id);
-          threadStarterId = firstHuman?.user || initialThreadStarter;
-          // @비즈-예약PM 멘션한 모든 사람 수집
-          for (const m of thread) {
-            if (m.user && m.text?.includes(BOT_MENTION) && !mentionerIds.includes(m.user)) {
-              mentionerIds.push(m.user);
-            }
-          }
-        }
-      } catch {
-        // 폴백: msg.text 사용
-      }
-
-      // DM 수신 대상: 원작성자 + 멘션한 사람들 (중복 제거)
-      const notifyIds = [...new Set([threadStarterId, ...mentionerIds].filter(Boolean))];
-
-      // JIRA 티켓 파싱
-      const ticketKey = parseJiraTicket(fullText) || "SCR-?";
-      const allShops = detectAllShopsIntent(fullText);
-      const shopSeq = allShops ? "" : parseShopSeq(fullText);
-
-      const permalink = await getPermalink(targetChannel, threadTs);
-
-      // 1) 스레드에 확인 답글
-      const ackSuffix = allShops
-        ? " (본문에 *전체 매장* 언급 확인 → 전체 매장 대상으로 진행)"
-        : shopSeq
-          ? ` (shop_seq ${shopSeq.split(",").length}개 추출)`
-          : "";
-      await slackApi("chat.postMessage", {
-        channel: targetChannel,
-        thread_ts: threadTs,
-        text: `:dog: 확인했습니다! <@${msg.user}>님에게 DM으로 추출 유형 선택을 안내드리겠습니다.${ackSuffix}`,
-        mrkdwn: true,
-      });
-
-      // 2) 요청자(승인자)에게 추출 유형 선택 버튼 DM
-      const metadata = JSON.stringify({
-        ticket_key: ticketKey,
-        shop_seq: shopSeq,
-        all_shops: allShops,
-        thread_ts: threadTs,
-        channel: targetChannel,
-        permalink,
-        requester_id: msg.user,
-        thread_starter_id: threadStarterId,
-        notify_ids: notifyIds,
-      });
-
-      const shopSeqLine = allShops
-        ? ":department_store: 대상: *전체 매장* (본문 언급 감지)"
-        : `:department_store: shop_seq: \`${shopSeq || "자동 추출 예정 (JIRA 시트/파싱)"}\``;
-
-      await sendBlockDM(msg.user, [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `:bell: *새 데이터 추출 요청*\n\n:ticket: JIRA: <https://catchtable.atlassian.net/browse/${ticketKey}|${ticketKey}>\n${shopSeqLine}\n:link: <${permalink}|Slack 스레드 보기>`,
-          },
-        },
-        {
-          type: "actions",
-          block_id: "extract_actions",
-          elements: [
-            {
-              type: "button",
-              text: { type: "plain_text", text: "1\uFE0F\u20E3 마케팅 수신용", emoji: true },
-              style: "primary",
-              action_id: "extract_marketing",
-              value: metadata,
-            },
-            {
-              type: "button",
-              text: { type: "plain_text", text: "2\uFE0F\u20E3 공지성 수신용", emoji: true },
-              action_id: "extract_notice",
-              value: metadata,
-            },
-            {
-              type: "button",
-              text: { type: "plain_text", text: "3\uFE0F\u20E3 그 외", emoji: true },
-              style: "danger",
-              action_id: "extract_other",
-              value: metadata,
-            },
-          ],
-        },
-      ], `${ticketKey} 추출 요청 — 유형을 선택해주세요`);
-
-      newProcessed.push(threadTs);
-      console.log(`[ExtractionMonitor] Processed thread ${threadTs} (${ticketKey}) → DM to ${msg.user}`);
-    } catch (err) {
-      console.error(`[ExtractionMonitor] Failed to process thread ${threadTs}:`, err);
-    }
+    const ok = await processMentionMessage({
+      channelId: targetChannel,
+      msg,
+      threadTs,
+      initialThreadStarterId: initialThreadStarter,
+      // state 업데이트는 루프 끝에서 일괄 처리하므로 여기서는 스킵
+      persistState: false,
+    });
+    if (ok) newProcessed.push(threadTs);
   }
 
   // state 업데이트
   state.last_checked_ts = latestTs;
-  state.processed_threads = newProcessed.slice(-100);
+  state.processed_threads = [...new Set([...state.processed_threads, ...newProcessed])].slice(-100);
   saveDutyState(state);
+}
+
+// ─── 단일 멘션 메시지 처리 (events endpoint + cron 공용) ───
+// 반환값: true = 처리 성공, false = 이미 처리됨/실패
+export async function processMentionMessage(params: {
+  channelId: string;
+  msg: { user: string; text?: string; ts?: string };
+  threadTs: string;
+  initialThreadStarterId?: string;
+  persistState?: boolean;
+}): Promise<boolean> {
+  const { channelId, msg, threadTs, initialThreadStarterId, persistState = true } = params;
+
+  // 중복 처리 방지
+  const state = getDutyState();
+  if ((state.processed_threads || []).includes(threadTs)) {
+    console.log(`[ExtractionMonitor] Skip already-processed thread ${threadTs}`);
+    return false;
+  }
+
+  try {
+    // 스레드 전체 텍스트 합치기 (JIRA 티켓/shop_seq 파싱용)
+    let fullText = msg.text || "";
+    let threadStarterId = initialThreadStarterId || msg.user;
+    const mentionerIds: string[] = [msg.user];
+    try {
+      const thread = await getThreadReplies(channelId, threadTs);
+      if (thread.length > 0) {
+        fullText = thread.map((m: any) => m.text || "").join("\n");
+        const firstHuman = thread.find((m: any) => m.user && !m.bot_id);
+        threadStarterId = firstHuman?.user || threadStarterId;
+        for (const m of thread) {
+          if (m.user && m.text?.includes(BOT_MENTION) && !mentionerIds.includes(m.user)) {
+            mentionerIds.push(m.user);
+          }
+        }
+      }
+    } catch {
+      // 폴백: msg.text 사용
+    }
+
+    const notifyIds = [...new Set([threadStarterId, ...mentionerIds].filter(Boolean))];
+
+    const ticketKey = parseJiraTicket(fullText) || "SCR-?";
+    const allShops = detectAllShopsIntent(fullText);
+    const shopSeq = allShops ? "" : parseShopSeq(fullText);
+
+    const permalink = await getPermalink(channelId, threadTs);
+
+    const ackSuffix = allShops
+      ? " (본문에 *전체 매장* 언급 확인 → 전체 매장 대상으로 진행)"
+      : shopSeq
+        ? ` (shop_seq ${shopSeq.split(",").length}개 추출)`
+        : "";
+    await slackApi("chat.postMessage", {
+      channel: channelId,
+      thread_ts: threadTs,
+      text: `:dog: 확인했습니다! <@${msg.user}>님에게 DM으로 추출 유형 선택을 안내드리겠습니다.${ackSuffix}`,
+      mrkdwn: true,
+    });
+
+    const metadata = JSON.stringify({
+      ticket_key: ticketKey,
+      shop_seq: shopSeq,
+      all_shops: allShops,
+      thread_ts: threadTs,
+      channel: channelId,
+      permalink,
+      requester_id: msg.user,
+      thread_starter_id: threadStarterId,
+      notify_ids: notifyIds,
+    });
+
+    const shopSeqLine = allShops
+      ? ":department_store: 대상: *전체 매장* (본문 언급 감지)"
+      : `:department_store: shop_seq: \`${shopSeq || "자동 추출 예정 (JIRA 시트/파싱)"}\``;
+
+    await sendBlockDM(msg.user, [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `:bell: *새 데이터 추출 요청*\n\n:ticket: JIRA: <https://catchtable.atlassian.net/browse/${ticketKey}|${ticketKey}>\n${shopSeqLine}\n:link: <${permalink}|Slack 스레드 보기>`,
+        },
+      },
+      {
+        type: "actions",
+        block_id: "extract_actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: "1\uFE0F\u20E3 마케팅 수신용", emoji: true },
+            style: "primary",
+            action_id: "extract_marketing",
+            value: metadata,
+          },
+          {
+            type: "button",
+            text: { type: "plain_text", text: "2\uFE0F\u20E3 공지성 수신용", emoji: true },
+            action_id: "extract_notice",
+            value: metadata,
+          },
+          {
+            type: "button",
+            text: { type: "plain_text", text: "3\uFE0F\u20E3 그 외", emoji: true },
+            style: "danger",
+            action_id: "extract_other",
+            value: metadata,
+          },
+        ],
+      },
+    ], `${ticketKey} 추출 요청 — 유형을 선택해주세요`);
+
+    if (persistState) {
+      const fresh = getDutyState();
+      fresh.processed_threads = [...new Set([...(fresh.processed_threads || []), threadTs])].slice(-100);
+      saveDutyState(fresh);
+    }
+
+    console.log(`[ExtractionMonitor] Processed thread ${threadTs} (${ticketKey}) → DM to ${msg.user}`);
+    return true;
+  } catch (err) {
+    console.error(`[ExtractionMonitor] Failed to process thread ${threadTs}:`, err);
+    return false;
+  }
 }
