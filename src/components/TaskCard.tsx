@@ -146,6 +146,8 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
   // 인라인 편집 상태
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(task.title);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descValue, setDescValue] = useState(task.description || "");
   const [editingDue, setEditingDue] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -158,6 +160,7 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
   const [urlValue, setUrlValue] = useState("");
 
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const descInputRef = useRef<HTMLTextAreaElement>(null);
   const jiraInputRef = useRef<HTMLInputElement>(null);
   const slackInputRef = useRef<HTMLInputElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -168,6 +171,17 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.select();
   }, [editingTitle]);
+
+  useEffect(() => {
+    if (editingDesc && descInputRef.current) {
+      const el = descInputRef.current;
+      el.focus();
+      el.selectionStart = el.selectionEnd = el.value.length;
+      // textarea 높이 자동 맞춤
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }, [editingDesc]);
 
   useEffect(() => {
     if (editingJira) jiraInputRef.current?.focus();
@@ -256,6 +270,14 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
       patchTask({ title: trimmed });
     } else {
       setTitleValue(task.title);
+    }
+  };
+
+  const handleDescSave = () => {
+    setEditingDesc(false);
+    const trimmed = descValue.trim();
+    if (trimmed !== (task.description || "")) {
+      patchTask({ description: trimmed || null });
     }
   };
 
@@ -513,8 +535,36 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
           </h3>
         )}
 
-        {/* 설명 — 항상 표시, 2줄 클램프 + 더 보기/접기 */}
-        {task.description && (
+        {/* 설명 — 인라인 편집 지원 + 2줄 클램프 + 더 보기/접기 */}
+        {editingDesc ? (
+          <div className="mt-1.5">
+            <textarea
+              ref={descInputRef}
+              value={descValue}
+              onChange={(e) => {
+                setDescValue(e.target.value);
+                // textarea 높이 자동 맞춤
+                e.target.style.height = "auto";
+                e.target.style.height = e.target.scrollHeight + "px";
+              }}
+              onBlur={handleDescSave}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setEditingDesc(false);
+                  setDescValue(task.description || "");
+                }
+                // Cmd/Ctrl+Enter로 저장
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  handleDescSave();
+                }
+              }}
+              placeholder="설명 입력..."
+              rows={2}
+              className="w-full text-[12px] text-slate-600 leading-relaxed bg-blue-50 border border-blue-300 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-blue-200 resize-none break-all"
+            />
+            <p className="mt-0.5 text-[10px] text-slate-400">⌘+Enter로 저장 · Esc 취소</p>
+          </div>
+        ) : task.description ? (
           <div className={cn("mt-1.5", task.sourceType === "slack_detected" ? "flex items-start gap-1" : "")}>
             {task.sourceType === "slack_detected" && (
               <MessageSquare size={10} className="flex-shrink-0 mt-0.5 text-slate-300" />
@@ -522,16 +572,19 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
             <div className="min-w-0 flex-1">
               <p
                 ref={descRef}
+                onClick={() => { if (!isDone) { setDescValue(task.description || ""); setEditingDesc(true); } }}
                 className={cn(
                   "text-[12px] text-slate-500 leading-relaxed break-all",
-                  expanded ? "" : "line-clamp-2"
+                  expanded ? "" : "line-clamp-2",
+                  !isDone && "cursor-text hover:text-slate-600 transition-colors"
                 )}
+                title={!isDone ? "클릭해서 수정" : undefined}
               >
                 {task.description}
               </p>
               {(isDescLong || expanded) && (
                 <button
-                  onClick={() => setExpanded(!expanded)}
+                  onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
                   className="mt-0.5 text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
                 >
                   {expanded ? "접기" : "더 보기"}
@@ -539,7 +592,14 @@ export default function TaskCard({ task, onUpdate, compact = false }: TaskCardPr
               )}
             </div>
           </div>
-        )}
+        ) : !isDone ? (
+          <button
+            onClick={() => { setDescValue(""); setEditingDesc(true); }}
+            className="mt-1 text-[11px] text-slate-300 hover:text-slate-500 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
+          >
+            + 설명 추가
+          </button>
+        ) : null}
 
         {/* 메타 정보 */}
         <div className={cn("flex items-center flex-wrap gap-1.5", task.description ? "mt-1.5" : compact ? "mt-1" : "mt-1.5")}>
