@@ -39,6 +39,7 @@ node_modules/.bin/next build
 ## 스케줄러 현황 (scheduler.ts)
 - 30분 간격: `runDailyScan(false)` — 스캔만, 리포트 없음
 - 10:00 KST: SOD 완료 여부 체크 → 미완료 시 넛지 DM 발송
+- 15분 간격 (09-19 KST): `runExtractionMonitor()` — #help-정보보안 모니터링
 - EOD: 수동(마무리 버튼)만, 자동 없음
 
 ## 하루 경계
@@ -48,6 +49,27 @@ node_modules/.bin/next build
 - `sortOrder` ASC → `createdAt` DESC (최신이 상단)
 - 드래그 앤 드롭(@dnd-kit)으로 순서 변경 → `/api/tasks/reorder` PATCH
 
+## 우선순위 4단계
+- `urgent`(긴급) > `high`(높음) > `medium`(보통) > `low`(낮음)
+- schema enum: `["urgent", "high", "medium", "low"]`
+- 기본값: `medium`
+- UI 색상: urgent=빨강, high=주황, medium=액센트, low=회색
+
+## 상태 (status)
+- `["pending", "in_progress", "in_qa", "done", "cancelled"]`
+- `overdue` 상태는 사용하지 않음 — 기한 초과는 기존 상태 유지, dueDate 기반 시각적 강조만
+- 칸반 컬럼: 대기(pending) / 진행 중(in_progress, in_qa) / 완료(done, 오늘분만 표시)
+
+## SOD/EOD Slack 리포트
+- **발송 대상**: DM 전용 (채널 발송 없음)
+- **정렬**: 우선순위 > 기한(없으면 맨 뒤) > 제목 가나다 순 (`sortTasks()`)
+- **기한 표기**: 기한 있는 항목에 `(MM-DD)` 형식으로 표기
+- **우선순위 표기**: `[긴급]`, `[높음]` 등 모든 섹션에 적용
+- **SOD 섹션**: 이관 / 새로 생긴 할일 / 오늘 마감 / 기한 초과 / 현황 / 오늘 미팅(GCal)
+- **EOD 섹션**: 오늘 완료 / 이관 / 기한 초과 / 스캔 결과
+- **GCal 미팅**: `isGcalConfigured()` 시 오늘 일정 표시 (private 제외, 종일 이벤트 제외)
+- **공통 헬퍼**: `getCarriedOverTasks()` — 어제 EOD carriedOverIds 기반, 없으면 전체 미완료 fallback
+
 ## linkType enum
 `["jira", "slack_thread", "gcal", "url"]` — "url" 타입은 slackThreadUrl 컬럼 재사용
 
@@ -55,8 +77,19 @@ node_modules/.bin/next build
 - `APP_URL=http://115.21.223.89:3100` — Slack DM 링크용
 - `SLACK_BOT_TOKEN`, `SLACK_USER_TOKEN`
 - `JIRA_API_TOKEN`, `JIRA_USER_EMAIL`
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` — GCal 연동
+- `GOOGLE_CALENDAR_ID` — 기본값: `hw.joo@catchtable.co.kr`
+
+## 공휴일
+- `src/lib/holidays.ts`: 2025-2029 한국 공휴일 하드코딩
+- `isWorkingDay()`: KST 기준 요일 판단 (UTC 아님)
+- `formatWorkingDate()`: KST 기준 요일 표시
 
 ## 주의사항
 - `start.js`에는 크론 없음 — 모든 스케줄은 `scheduler.ts`에서만
 - `sendDM()`에 `unfurl_links: false` 적용 — IP 노출 방지
 - SOD 버튼: 모달 + Slack 발송(runStartOfDay) + DB 기록 → 10시 넛지 자동 스킵
+- NAS Watchtower DNS timeout 간헐적 발생 — 배포 후 수동 pull 필요할 수 있음
+  `ssh -p 224 -i ~/.ssh/nas_key your4leaf@115.21.223.89 "sudo /usr/local/bin/docker pull ghcr.io/partyto/work-autopilot:latest && cd /volume1/docker/work-autopilot && sudo /usr/local/bin/docker compose up -d"`
+- `todayDate()` (utils.ts): KST 기준 날짜 반환 (UTC가 아닌 KST+9 보정)
+- 워크트리 작업 시 main 머지: `cd 업무\ 자동화/Work-Pavlotrasche && git merge claude/reverent-cerf --no-ff -m "..." && git push origin main`
