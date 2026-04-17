@@ -74,7 +74,7 @@ node_modules/.bin/next build
 `["jira", "slack_thread", "gcal", "url"]` — "url" 타입은 slackThreadUrl 컬럼 재사용
 
 ## 환경변수 주요 항목 (.env.local / NAS .env)
-- `APP_URL=http://115.21.223.89:3100` — Slack DM 링크용
+- `APP_URL=http://115.21.223.89:3102` — Slack DM 링크용
 - `SLACK_BOT_TOKEN`, `SLACK_USER_TOKEN`
 - `JIRA_API_TOKEN`, `JIRA_USER_EMAIL`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` — GCal 연동
