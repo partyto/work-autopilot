@@ -389,7 +389,7 @@ export async function hasTodaySOD(): Promise<boolean> {
 export async function sendSODNudge(): Promise<void> {
   const today = new Date();
   const dateLabel = formatWorkingDate(today);
-  const dashboardUrl = process.env.APP_URL ?? "http://localhost:3100";
+  const dashboardUrl = process.env.APP_URL ?? "http://localhost:3102";
 
   const message = [
     `*🌅 하루를 시작해 볼까요?*`,
