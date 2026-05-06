@@ -127,9 +127,10 @@ export async function searchMentions(query: string, count = 20) {
 export async function getThreadReplies(channelId: string, threadTs: string) {
   // conversations.replies는 JSON body를 지원하지 않으므로 GET query string으로 호출
   await throttle();
+  const token = await getAccessToken("bot");
   const params = new URLSearchParams({ channel: channelId, ts: threadTs, limit: "100" });
   const res = await fetch(`https://slack.com/api/conversations.replies?${params}`, {
-    headers: { Authorization: `Bearer ${SLACK_TOKEN}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
   if (!data.ok) throw new Error(`Slack API error: ${data.error}`);
