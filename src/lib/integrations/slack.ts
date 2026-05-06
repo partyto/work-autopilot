@@ -1,10 +1,9 @@
 // Slack Web API 직접 연동 — Cowork MCP 의존성 제거
-// 필요 환경변수: SLACK_BOT_TOKEN, SLACK_USER_TOKEN, SLACK_USER_ID
-// - SLACK_BOT_TOKEN: DM 발송, 스레드 답글 등 (xoxb-)
-// - SLACK_USER_TOKEN: 검색 API용 (xoxp-) — search:read scope 필요
+// 토큰 로테이션 지원 (slack-tokens.ts) — DB에 저장된 토큰 자동 갱신
+// 마이그레이션 호환: DB 토큰 없으면 SLACK_BOT_TOKEN/SLACK_USER_TOKEN 환경변수 fallback
 
-const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN || "";
-const SLACK_USER_TOKEN = process.env.SLACK_USER_TOKEN || "";
+import { getAccessToken, hasToken } from "./slack-tokens";
+
 const SLACK_USER_ID = process.env.SLACK_USER_ID || "U042YQ0RUAY";
 
 // Slack API 레이트 리밋 (Tier 3: ~50 req/min → 최소 1200ms 간격)
@@ -19,10 +18,11 @@ async function throttle() {
 
 async function slackApi(method: string, body: Record<string, any> = {}) {
   await throttle();
+  const token = await getAccessToken("bot");
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SLACK_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -77,8 +77,13 @@ export async function replyToThread(channelId: string, threadTs: string, text: s
 
 // 메시지에 이모지 반응 추가 (User Token 우선 — reactions:write 스코프 필요)
 export async function addReaction(channelId: string, messageTs: string, emoji: string) {
-  const token = SLACK_USER_TOKEN || SLACK_TOKEN;
-  if (!token) throw new Error("Slack token not configured");
+  // user 토큰 우선 사용, 없으면 bot
+  let token: string;
+  try {
+    token = await getAccessToken("user");
+  } catch {
+    token = await getAccessToken("bot");
+  }
 
   await throttle();
   const res = await fetch("https://slack.com/api/reactions.add", {
@@ -96,9 +101,11 @@ export async function addReaction(channelId: string, messageTs: string, emoji: s
 
 // 최근 멘션 검색 (User Token 필요 — search:read scope)
 export async function searchMentions(query: string, count = 20) {
-  const token = SLACK_USER_TOKEN || SLACK_TOKEN;
-  if (!token) {
-    console.warn("Slack search skipped: no token available");
+  let token: string;
+  try {
+    token = await getAccessToken("user");
+  } catch {
+    console.warn("Slack search skipped: no user token available");
     return [];
   }
 
@@ -110,7 +117,7 @@ export async function searchMentions(query: string, count = 20) {
   );
   const data = await res.json();
   if (!data.ok) {
-    console.warn("Slack search failed:", data.error, SLACK_USER_TOKEN ? "(user token)" : "(bot token — user token 필요)");
+    console.warn("Slack search failed:", data.error, "(user token 필요)");
     return [];
   }
   return data.messages?.matches || [];
@@ -161,9 +168,16 @@ export async function updateMessage(
   return slackApi("chat.update", { channel, ts, blocks, text });
 }
 
-// Slack 설정 유효성 체크
+// Slack 설정 유효성 체크 (sync — 기존 호출처 시그니처 유지를 위해 best-effort)
+// 정확한 체크는 hasSlackToken() 사용
 export function isSlackConfigured(): boolean {
-  return !!SLACK_TOKEN;
+  // 환경변수가 있거나 (DB 토큰 체크는 async라 불가) 향후 호출 시점에 검증
+  return !!process.env.SLACK_BOT_TOKEN || !!process.env.SLACK_CLIENT_ID;
+}
+
+// 비동기 정확 체크
+export async function hasSlackToken(): Promise<boolean> {
+  return hasToken("bot");
 }
 
 // #help-정보보안 등 채널 히스토리 조회
@@ -177,9 +191,10 @@ export async function getChannelHistory(channelId: string, oldest?: string, limi
 // 메시지 permalink 조회
 export async function getPermalink(channelId: string, messageTs: string): Promise<string> {
   await throttle();
+  const token = await getAccessToken("bot");
   const res = await fetch(
     `https://slack.com/api/chat.getPermalink?channel=${channelId}&message_ts=${messageTs}`,
-    { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+    { headers: { Authorization: `Bearer ${token}` } }
   );
   const data = await res.json();
   return data.permalink || "";

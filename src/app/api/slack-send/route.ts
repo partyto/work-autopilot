@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendDM, replyToThread } from "@/lib/integrations/slack";
+import { sendDM } from "@/lib/integrations/slack";
+import { getAccessToken } from "@/lib/integrations/slack-tokens";
 
 export const dynamic = "force-dynamic";
 
-const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN || "";
-
 async function postToChannel(channelId: string, text: string, threadTs?: string) {
+  const token = await getAccessToken("bot");
   const body: Record<string, any> = { channel: channelId, text, mrkdwn: true };
   if (threadTs) body.thread_ts = threadTs;
 
   const res = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SLACK_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),

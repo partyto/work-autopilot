@@ -1,15 +1,16 @@
 // Slack 파일 다운로드 유틸리티
-const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN || "";
+import { getAccessToken } from "./slack-tokens";
 
 // DM에서 최신 .xlsx 파일 찾기
 export async function findLatestExcelInDM(
   userId: string,
 ): Promise<{ url: string; name: string; id: string } | null> {
+  const token = await getAccessToken("bot");
   // DM 채널 열기
   const openRes = await fetch("https://slack.com/api/conversations.open", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SLACK_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ users: userId }),
@@ -22,7 +23,7 @@ export async function findLatestExcelInDM(
   const histRes = await fetch("https://slack.com/api/conversations.history", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${SLACK_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ channel: dmChannelId, limit: 20 }),
@@ -48,8 +49,9 @@ export async function findLatestExcelInDM(
 
 // Slack private URL에서 파일 다운로드
 export async function downloadSlackFile(url: string): Promise<Buffer> {
+  const token = await getAccessToken("bot");
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${SLACK_TOKEN}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Slack file download failed: ${res.status}`);
   const arrayBuffer = await res.arrayBuffer();

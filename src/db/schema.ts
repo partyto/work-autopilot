@@ -117,6 +117,21 @@ export const workflowLogs = sqliteTable("workflow_logs", {
     .default(sql`(datetime('now', 'localtime'))`),
 }, (t) => [uniqueIndex("workflow_logs_date_type").on(t.date, t.type)]);
 
+// ===== Slack OAuth 토큰 (token rotation 지원) =====
+export const slackTokens = sqliteTable("slack_tokens", {
+  id: text("id").primaryKey(),                     // "bot" | "user"
+  accessToken: text("access_token").notNull(),     // xoxe.xoxb-... or xoxe.xoxp-...
+  refreshToken: text("refresh_token").notNull(),   // xoxe-1-...
+  expiresAt: integer("expires_at").notNull(),      // Unix epoch (ms)
+  scope: text("scope"),                            // 공백 구분 scope 문자열
+  teamId: text("team_id"),
+  enterpriseId: text("enterprise_id"),
+  authedUserId: text("authed_user_id"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now', 'localtime'))`),
+});
+
 // ===== Type exports =====
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;

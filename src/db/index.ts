@@ -79,6 +79,17 @@ CREATE TABLE IF NOT EXISTS workflow_logs (
   created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   UNIQUE(date, type)
 );
+CREATE TABLE IF NOT EXISTS slack_tokens (
+  id TEXT PRIMARY KEY,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  scope TEXT,
+  team_id TEXT,
+  enterprise_id TEXT,
+  authed_user_id TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
 `;
 
 // 컬럼 마이그레이션 (기존 DB에 컬럼 없을 경우 추가)
